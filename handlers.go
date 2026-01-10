@@ -1827,7 +1827,6 @@ func (s *server) SendButtons() http.HandlerFunc {
             return
         }
 
-        // Montando os botões no novo formato compatível com waE2E
         var buttons []*waE2E.ButtonsMessage_Button
 
         for _, b := range t.Buttons {
@@ -1836,32 +1835,28 @@ func (s *server) SendButtons() http.HandlerFunc {
             }
 
             if b.Url != "" {
-                // Botão de Link
                 btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
                     Name: proto.String("cta_url"),
                     ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","url":"%s","merchant_url":"%s"}`, b.Text, b.Url, b.Url)),
                 }
             } else if b.PhoneNumber != "" {
-                // Botão de Ligar
                 btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
                     Name: proto.String("cta_call"),
                     ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","phone_number":"%s"}`, b.Text, b.PhoneNumber)),
                 }
             } else {
-                // Botão de Resposta Comum (ID)
                 btn.ButtonID = proto.String(b.Id)
                 btn.Type = waE2E.ButtonsMessage_Button_RESPONSE.Enum()
             }
             buttons = append(buttons, btn)
         }
 
-        // Criando a mensagem interativa
         msg := &waE2E.ButtonsMessage{
-            ContentText:  proto.String(t.Text),
-            HeaderText:   proto.String(t.Title),
-            FooterText:   proto.String(t.Footer),
-            Buttons:      buttons,
-            HeaderType:   waE2E.ButtonsMessage_TEXT.Enum(),
+            ContentText: proto.String(t.Text),
+            HeaderText:  proto.String(t.Title),
+            FooterText:  proto.String(t.Footer),
+            Buttons:     buttons,
+            HeaderType:  waE2E.ButtonsMessage_TEXT.Enum(),
         }
 
         resp, err := client.SendMessage(context.Background(), recipient, &waE2E.Message{
@@ -1870,7 +1865,7 @@ func (s *server) SendButtons() http.HandlerFunc {
                     ButtonsMessage: msg,
                 },
             },
-        })
+        }, whatsmeow.SendRequestExtra{})
 
         if err != nil {
             s.Respond(w, r, http.StatusInternalServerError, fmt.Errorf("error sending message: %v", err))
