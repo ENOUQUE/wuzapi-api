@@ -1791,93 +1791,91 @@ func (s *server) SendLocation() http.HandlerFunc {
 }
 
 func (s *server) SendButtons() http.HandlerFunc {
-    // Estrutura atualizada para aceitar URL, Telefone e ID
-    type buttonStruct struct {
-        Id          string `json:"id"`
-        Text        string `json:"text"`
-        Url         string `json:"url"`
-        PhoneNumber string `json:"phoneNumber"`
-    }
-    type textStruct struct {
-        Number  string         `json:"number"`
-        Text    string         `json:"text"`
-        Title   string         `json:"title"`
-        Footer  string         `json:"footer"`
-        Buttons []buttonStruct `json:"buttons"`
-    }
+	type buttonStruct struct {
+		Id          string `json:"id"`
+		Text        string `json:"text"`
+		Url         string `json:"url"`
+		PhoneNumber string `json:"phoneNumber"`
+	}
+	type textStruct struct {
+		Number  string         `json:"number"`
+		Text    string         `json:"text"`
+		Title   string         `json:"title"`
+		Footer  string         `json:"footer"`
+		Buttons []buttonStruct `json:"buttons"`
+	}
 
-    return func(w http.ResponseWriter, r *http.Request) {
-        txtid := r.Context().Value("userinfo").(Values).Get("Id")
-        client := clientManager.GetWhatsmeowClient(txtid)
+	return func(w http.ResponseWriter, r *http.Request) {
+		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+		client := clientManager.GetWhatsmeowClient(txtid)
 
-        if client == nil {
-            s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
-            return
-        }
+		if client == nil {
+			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
+			return
+		}
 
-        var t textStruct
-        if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-            s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
-            return
-        }
+		var t textStruct
+		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
+			return
+		}
 
-        recipient, ok := parseJID(t.Number)
-        if !ok {
-            s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
-            return
-        }
+		recipient, ok := parseJID(t.Number)
+		if !ok {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
+			return
+		}
 
-        var buttons []*waE2E.ButtonsMessage_Button
+		var buttons []*waE2E.ButtonsMessage_Button
+		for _, b := range t.Buttons {
+			btn := &waE2E.ButtonsMessage_Button{
+				ButtonText: &waE2E.ButtonsMessage_Button_ButtonText{DisplayText: proto.String(b.Text)},
+			}
 
-        for _, b := range t.Buttons {
-            btn := &waE2E.ButtonsMessage_Button{
-                ButtonText: &waE2E.ButtonsMessage_Button_ButtonText{DisplayText: proto.String(b.Text)},
-            }
+			if b.Url != "" {
+				btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
+					Name: proto.String("cta_url"),
+					ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","url":"%s","merchant_url":"%s"}`, b.Text, b.Url, b.Url)),
+				}
+			} else if b.PhoneNumber != "" {
+				btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
+					Name: proto.String("cta_call"),
+					ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","phone_number":"%s"}`, b.Text, b.PhoneNumber)),
+				}
+			} else {
+				btn.ButtonID = proto.String(b.Id)
+				btn.Type = waE2E.ButtonsMessage_Button_RESPONSE.Enum()
+			}
+			buttons = append(buttons, btn)
+		}
 
-            if b.Url != "" {
-                btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
-                    Name: proto.String("cta_url"),
-                    ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","url":"%s","merchant_url":"%s"}`, b.Text, b.Url, b.Url)),
-                }
-            } else if b.PhoneNumber != "" {
-                btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
-                    Name: proto.String("cta_call"),
-                    ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","phone_number":"%s"}`, b.Text, b.PhoneNumber)),
-                }
-            } else {
-                btn.ButtonID = proto.String(b.Id)
-                btn.Type = waE2E.ButtonsMessage_Button_RESPONSE.Enum()
-            }
-            buttons = append(buttons, btn)
-        }
+		msg := &waE2E.ButtonsMessage{
+			ContentText: proto.String(t.Text),
+			HeaderText:  proto.String(t.Title),
+			FooterText:  proto.String(t.Footer),
+			Buttons:     buttons,
+			HeaderType:  waE2E.ButtonsMessage_TEXT.Enum(),
+		}
 
-        msg := &waE2E.ButtonsMessage{
-            ContentText: proto.String(t.Text),
-            HeaderText:  proto.String(t.Title),
-            FooterText:  proto.String(t.Footer),
-            Buttons:     buttons,
-            HeaderType:  waE2E.ButtonsMessage_TEXT.Enum(),
-        }
+		resp, err := client.SendMessage(context.Background(), recipient, &waE2E.Message{
+			ViewOnceMessage: &waE2E.FutureProofMessage{
+				Message: &waE2E.Message{
+					ButtonsMessage: msg,
+				},
+			},
+		}, whatsmeow.SendRequestExtra{})
 
-        resp, err := client.SendMessage(context.Background(), recipient, &waE2E.Message{
-            ViewOnceMessage: &waE2E.FutureProofMessage{
-                Message: &waE2E.Message{
-                    ButtonsMessage: msg,
-                },
-            },
-        }, whatsmeow.SendRequestExtra{})
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, fmt.Errorf("error sending message: %v", err))
+			return
+		}
 
-        if err != nil {
-            s.Respond(w, r, http.StatusInternalServerError, fmt.Errorf("error sending message: %v", err))
-            return
-        }
-
-        s.Respond(w, r, http.StatusOK, map[string]interface{}{
-            "Details":   "Sent",
-            "Timestamp": resp.Timestamp.Unix(),
-            "Id":        resp.ID,
-        })
-    }
+		s.Respond(w, r, http.StatusOK, map[string]interface{}{
+			"Details":   "Sent",
+			"Timestamp": resp.Timestamp.Unix(),
+			"Id":        resp.ID,
+		})
+	}
 }
 
 // SendList
