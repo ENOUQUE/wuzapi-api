@@ -152,11 +152,7 @@ func (s *server) authalice(next http.Handler) http.Handler {
 
 		myuserinfo, found := userinfocache.Get(token)
 		if !found {
-			tokenPreview := token
-			if len(token) > 8 {
-				tokenPreview = token[:8] + "..."
-			}
-			log.Debug().Str("token", tokenPreview).Msg("User token not found in cache, querying database")
+			log.Info().Msg("Looking for user information in DB")
 			// Checks DB from matching user and store user values in context
 			rows, err := s.db.Query("SELECT id,name,webhook,jid,events,proxy_url,qrcode,history,hmac_key IS NOT NULL AND length(hmac_key) > 0 FROM users WHERE token=$1 LIMIT 1", token)
 			if err != nil {
@@ -1794,220 +1790,121 @@ func (s *server) SendLocation() http.HandlerFunc {
 	}
 }
 
-// Sends Buttons - sends interactive button messages
 func (s *server) SendButtons() http.HandlerFunc {
+    // Estrutura atualizada para aceitar URL, Telefone e ID
+    type buttonStruct struct {
+        Id          string `json:"id"`
+        Text        string `json:"text"`
+        Url         string `json:"url"`
+        PhoneNumber string `json:"phoneNumber"`
+    }
+    type textStruct struct {
+        Number  string         `json:"number"`
+        Text    string         `json:"text"`
+        Title   string         `json:"title"`
+        Footer  string         `json:"footer"`
+        Buttons []buttonStruct `json:"buttons"`
+    }
 
-	type buttonStruct struct {
-		ButtonId    string `json:"ButtonId,omitempty"`
-		ButtonText  string `json:"ButtonText,omitempty"`
-		Id          string `json:"id,omitempty"`
-		Text        string `json:"text,omitempty"`
-		PhoneNumber string `json:"phoneNumber,omitempty"`
-		URL         string `json:"url,omitempty"`
-	}
-	type textStruct struct {
-		Phone   string         `json:"Phone,omitempty"`
-		Number  string         `json:"number,omitempty"`
-		Title   string         `json:"Title,omitempty"`
-		Text    string         `json:"text,omitempty"`
-		Buttons []buttonStruct `json:"Buttons,omitempty"`
-		ButtonsAlt []buttonStruct `json:"buttons,omitempty"`
-		Footer  string         `json:"Footer,omitempty"`
-		FooterAlt string       `json:"footer,omitempty"`
-		Id      string         `json:"Id,omitempty"`
-	}
+    return func(w http.ResponseWriter, r *http.Request) {
+        txtid := r.Context().Value("userinfo").(Values).Get("Id")
+        client := clientManager.GetWhatsmeowClient(txtid)
 
-	return func(w http.ResponseWriter, r *http.Request) {
+        if client == nil {
+            s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
+            return
+        }
 
-		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+        var t textStruct
+        if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+            s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
+            return
+        }
 
-		if clientManager.GetWhatsmeowClient(txtid) == nil {
-			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
-			return
-		}
+        recipient, ok := parseJID(t.Number)
+        if !ok {
+            s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
+            return
+        }
 
-		msgid := ""
-		var resp whatsmeow.SendResponse
+        // Montando os botões no novo formato compatível com waE2E
+        var buttons []*waE2E.ButtonsMessage_Button
 
-		decoder := json.NewDecoder(r.Body)
-		var t textStruct
-		err := decoder.Decode(&t)
-		if err != nil {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
-			return
-		}
+        for _, b := range t.Buttons {
+            btn := &waE2E.ButtonsMessage_Button{
+                ButtonText: &waE2E.ButtonsMessage_Button_ButtonText{DisplayText: proto.String(b.Text)},
+            }
 
-		// Support both Phone and number fields
-		phone := t.Phone
-		if phone == "" {
-			phone = t.Number
-		}
-		if phone == "" {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Phone/number in Payload"))
-			return
-		}
+            if b.Url != "" {
+                // Botão de Link
+                btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
+                    Name: proto.String("cta_url"),
+                    ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","url":"%s","merchant_url":"%s"}`, b.Text, b.Url, b.Url)),
+                }
+            } else if b.PhoneNumber != "" {
+                // Botão de Ligar
+                btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
+                    Name: proto.String("cta_call"),
+                    ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","phone_number":"%s"}`, b.Text, b.PhoneNumber)),
+                }
+            } else {
+                // Botão de Resposta Comum (ID)
+                btn.ButtonID = proto.String(b.Id)
+                btn.Type = waE2E.ButtonsMessage_Button_RESPONSE.Enum()
+            }
+            buttons = append(buttons, btn)
+        }
 
-		// Support both Title and text fields
-		title := t.Title
-		if title == "" {
-			title = t.Text
-		}
-		if title == "" {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Title/text in Payload"))
-			return
-		}
+        // Criando a mensagem interativa
+        msg := &waE2E.ButtonsMessage{
+            ContentText:  proto.String(t.Text),
+            HeaderText:   proto.String(t.Title),
+            FooterText:   proto.String(t.Footer),
+            Buttons:      buttons,
+            HeaderType:   waE2E.ButtonsMessage_TEXT.Enum(),
+        }
 
-		// Support both Buttons and buttons fields
-		buttons := t.Buttons
-		if len(buttons) == 0 {
-			buttons = t.ButtonsAlt
-		}
-		if len(buttons) < 1 {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Buttons in Payload"))
-			return
-		}
-		if len(buttons) > 5 {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("buttons cant more than 5"))
-			return
-		}
-		
-		// Support both Footer and footer fields
-		footer := t.Footer
-		if footer == "" {
-			footer = t.FooterAlt
-		}
-		
-		// Validate that all buttons have text
-		for i, btn := range buttons {
-			buttonText := btn.ButtonText
-			if buttonText == "" {
-				buttonText = btn.Text
-			}
-			if strings.TrimSpace(buttonText) == "" {
-				s.Respond(w, r, http.StatusBadRequest, errors.New(fmt.Sprintf("ButtonText/text is required for button %d", i+1)))
-				return
-			}
-		}
+        resp, err := client.SendMessage(context.Background(), recipient, &waE2E.Message{
+            ViewOnceMessage: &waE2E.FutureProofMessage{
+                Message: &waE2E.Message{
+                    ButtonsMessage: msg,
+                },
+            },
+        })
 
-		recipient, ok := parseJID(phone)
-		if !ok {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
-			return
-		}
+        if err != nil {
+            s.Respond(w, r, http.StatusInternalServerError, fmt.Errorf("error sending message: %v", err))
+            return
+        }
 
-		if t.Id == "" {
-			msgid = clientManager.GetWhatsmeowClient(txtid).GenerateMessageID()
-		} else {
-			msgid = t.Id
-		}
-
-		var buttonMessages []*waE2E.ButtonsMessage_Button
-
-		for i, item := range buttons {
-			// Get button text (support both ButtonText and text)
-			buttonText := item.ButtonText
-			if buttonText == "" {
-				buttonText = item.Text
-			}
-			
-			// Determine button type and ID
-			var buttonId string
-			var buttonType waE2E.ButtonsMessage_Button_ButtonType
-			
-			// Priority: url > phoneNumber (stored as response) > id/ButtonId
-			if item.URL != "" {
-				buttonId = item.URL
-				buttonType = waE2E.ButtonsMessage_Button_URL
-			} else if item.PhoneNumber != "" {
-				// Store phone number in button ID for response handling
-				buttonId = item.PhoneNumber
-				buttonType = waE2E.ButtonsMessage_Button_RESPONSE
-			} else {
-				// Use id, ButtonId, or generate one
-				buttonId = item.Id
-				if buttonId == "" {
-					buttonId = item.ButtonId
-				}
-				if buttonId == "" {
-					buttonId = fmt.Sprintf("btn_%d", i+1)
-				}
-				buttonType = waE2E.ButtonsMessage_Button_RESPONSE
-			}
-			
-			buttonMsg := &waE2E.ButtonsMessage_Button{
-				ButtonID:       proto.String(buttonId),
-				ButtonText:     &waE2E.ButtonsMessage_Button_ButtonText{DisplayText: proto.String(buttonText)},
-				Type:           buttonType.Enum(),
-				NativeFlowInfo: &waE2E.ButtonsMessage_Button_NativeFlowInfo{},
-			}
-			
-			// Set URL if provided
-			if item.URL != "" {
-				buttonMsg.URL = proto.String(item.URL)
-			}
-			
-			buttonMessages = append(buttonMessages, buttonMsg)
-		}
-
-		msg2 := &waE2E.ButtonsMessage{
-			ContentText: proto.String(title),
-			HeaderType:  waE2E.ButtonsMessage_EMPTY.Enum(),
-			Buttons:     buttonMessages,
-		}
-		
-		// Add footer if provided
-		if footer != "" {
-			msg2.FooterText = proto.String(footer)
-		}
-
-		resp, err = clientManager.GetWhatsmeowClient(txtid).SendMessage(context.Background(), recipient, &waE2E.Message{
-			ButtonsMessage: msg2,
-		}, whatsmeow.SendRequestExtra{ID: msgid})
-		if err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("error sending message: %v", err)))
-			return
-		}
-
-		log.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", msgid).Msg("Message sent")
-		response := map[string]interface{}{"Details": "Sent", "Timestamp": resp.Timestamp.Unix(), "Id": msgid}
-		responseJson, err := json.Marshal(response)
-		if err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, err)
-		} else {
-			s.Respond(w, r, http.StatusOK, string(responseJson))
-		}
-		return
-	}
+        s.Respond(w, r, http.StatusOK, map[string]interface{}{
+            "Details":   "Sent",
+            "Timestamp": resp.Timestamp.Unix(),
+            "Id":        resp.ID,
+        })
+    }
 }
 
 // SendList
 func (s *server) SendList() http.HandlerFunc {
 	type listItem struct {
-		Title       string `json:"title"`
-		Desc        string `json:"desc,omitempty"`
-		Descriptions string `json:"descriptions,omitempty"`
-		RowId       string `json:"RowId,omitempty"`
-		Id          string `json:"id,omitempty"`
+		Title string `json:"title"`
+		Desc  string `json:"desc"`
+		RowId string `json:"RowId"`
 	}
 	type section struct {
-		Title string     `json:"title,omitempty"`
+		Title string     `json:"title"`
 		Rows  []listItem `json:"rows"`
 	}
 	type listRequest struct {
-		Phone          string     `json:"Phone,omitempty"`
-		Number         string     `json:"number,omitempty"`
-		ButtonText     string     `json:"ButtonText,omitempty"`
-		TitleListButton string    `json:"titleListButton,omitempty"`
-		Desc           string     `json:"Desc,omitempty"`
-		Body           string     `json:"body,omitempty"`
-		TopText        string     `json:"TopText,omitempty"`
-		Title          string     `json:"title,omitempty"`
-		Sections       []section  `json:"Sections,omitempty"`
-		SectionsAlt    []section  `json:"sections,omitempty"` // lowercase compatibility
-		List           []listItem `json:"List,omitempty"` // compatibility
-		FooterText     string     `json:"FooterText,omitempty"`
-		Footer         string     `json:"footer,omitempty"`
-		Id             string     `json:"Id,omitempty"`
+		Phone      string     `json:"Phone"`
+		ButtonText string     `json:"ButtonText"`
+		Desc       string     `json:"Desc"`
+		TopText    string     `json:"TopText"`
+		Sections   []section  `json:"Sections"`
+		List       []listItem `json:"List"` // compatibility
+		FooterText string     `json:"FooterText"`
+		Id         string     `json:"Id,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -2024,110 +1921,49 @@ func (s *server) SendList() http.HandlerFunc {
 			return
 		}
 
-		// Support both Phone and number fields
-		phone := req.Phone
-		if phone == "" {
-			phone = req.Number
-		}
-		
-		// Support both ButtonText and titleListButton
-		buttonText := req.ButtonText
-		if buttonText == "" {
-			buttonText = req.TitleListButton
-		}
-		
-		// Support both Desc and body fields
-		desc := req.Desc
-		if desc == "" {
-			desc = req.Body
-		}
-		
-		// Support both TopText and title fields
-		topText := req.TopText
-		if topText == "" {
-			topText = req.Title
-		}
-		
-		// Support both FooterText and footer fields
-		footerText := req.FooterText
-		if footerText == "" {
-			footerText = req.Footer
-		}
-
 		// Required fields validation - FooterText is optional
-		if phone == "" || buttonText == "" || desc == "" || topText == "" {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing required fields: Phone/number, ButtonText/titleListButton, Desc/body, TopText/title"))
+		if req.Phone == "" || req.ButtonText == "" || req.Desc == "" || req.TopText == "" {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("missing required fields: Phone, ButtonText, Desc, TopText"))
 			return
 		}
 
 		// Priority for Sections, but accepts List for compatibility
 		var sections []*waE2E.ListMessage_Section
-		// Support both Sections and sections (case insensitive)
-		requestSections := req.Sections
-		if len(requestSections) == 0 {
-			requestSections = req.SectionsAlt
-		}
-		if len(requestSections) > 0 {
-			for _, sec := range requestSections {
+		if len(req.Sections) > 0 {
+			for _, sec := range req.Sections {
 				var rows []*waE2E.ListMessage_Row
 				for _, item := range sec.Rows {
-					// Support both RowId and id
 					rowId := item.RowId
-					if rowId == "" {
-						rowId = item.Id
-					}
 					if rowId == "" {
 						rowId = item.Title // fallback
 					}
-					
-					// Support both Desc and descriptions
-					itemDesc := item.Desc
-					if itemDesc == "" {
-						itemDesc = item.Descriptions
-					}
-					
 					rows = append(rows, &waE2E.ListMessage_Row{
 						RowID:       proto.String(rowId),
 						Title:       proto.String(item.Title),
-						Description: proto.String(itemDesc),
+						Description: proto.String(item.Desc),
 					})
 				}
-				sectionTitle := sec.Title
-				if sectionTitle == "" {
-					sectionTitle = "Menu"
-				}
 				sections = append(sections, &waE2E.ListMessage_Section{
-					Title: proto.String(sectionTitle),
+					Title: proto.String(sec.Title),
 					Rows:  rows,
 				})
 			}
 		} else if len(req.List) > 0 {
 			var rows []*waE2E.ListMessage_Row
 			for _, item := range req.List {
-				// Support both RowId and id
 				rowId := item.RowId
-				if rowId == "" {
-					rowId = item.Id
-				}
 				if rowId == "" {
 					rowId = item.Title // fallback
 				}
-				
-				// Support both Desc and descriptions
-				itemDesc := item.Desc
-				if itemDesc == "" {
-					itemDesc = item.Descriptions
-				}
-				
 				rows = append(rows, &waE2E.ListMessage_Row{
 					RowID:       proto.String(rowId),
 					Title:       proto.String(item.Title),
-					Description: proto.String(itemDesc),
+					Description: proto.String(item.Desc),
 				})
 			}
 
 			// Debug: dynamic title: uses TopText if it exists, otherwise 'Menu'
-			sectionTitle := topText
+			sectionTitle := req.TopText
 			if sectionTitle == "" {
 				sectionTitle = "Menu"
 			}
@@ -2140,7 +1976,7 @@ func (s *server) SendList() http.HandlerFunc {
 			return
 		}
 
-		recipient, ok := parseJID(phone)
+		recipient, ok := parseJID(req.Phone)
 		if !ok {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
 			return
@@ -2153,16 +1989,16 @@ func (s *server) SendList() http.HandlerFunc {
 
 		// Create the message with ListMessage
 		listMsg := &waE2E.ListMessage{
-			Title:       proto.String(topText),
-			Description: proto.String(desc),
-			ButtonText:  proto.String(buttonText),
+			Title:       proto.String(req.TopText),
+			Description: proto.String(req.Desc),
+			ButtonText:  proto.String(req.ButtonText),
 			ListType:    waE2E.ListMessage_SINGLE_SELECT.Enum(),
 			Sections:    sections,
 		}
 
 		// Add footer only if provided
-		if footerText != "" {
-			listMsg.FooterText = proto.String(footerText)
+		if req.FooterText != "" {
+			listMsg.FooterText = proto.String(req.FooterText)
 		}
 
 		// Try with ViewOnceMessage wrapper as some users report this helps with error 405
@@ -2188,7 +2024,7 @@ func (s *server) SendList() http.HandlerFunc {
 		log.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", msgid).Msg("Message list sent")
 		response := map[string]interface{}{
 			"Details":   "Sent",
-			"Timestamp": resp.Timestamp.Unix(),
+			"Timestamp": resp.Timestamp,
 			"Id":        msgid,
 		}
 		responseJson, err := json.Marshal(response)
@@ -2728,7 +2564,7 @@ func (s *server) RequestHistorySync() http.HandlerFunc {
 	}
 }
 
-/*
+
 // Sends a Template message
 func (s *server) SendTemplate() http.HandlerFunc {
 
