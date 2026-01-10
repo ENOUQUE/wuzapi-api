@@ -2262,16 +2262,17 @@ async function sendButtonsMessage() {
       const buttonId = $(this).find('.button-id').val().trim();
       const buttonText = $(this).find('.button-text').val().trim();
       
-      if (buttonId && buttonText) {
+      // ButtonText is required, ButtonId is optional (will be generated if not provided)
+      if (buttonText) {
         buttons.push({
-          ButtonId: buttonId,
+          ButtonId: buttonId || `btn_${buttons.length + 1}`,
           ButtonText: buttonText
         });
       }
     });
     
     if (buttons.length === 0) {
-      showError('Please fill in at least one complete button (ID and Text)');
+      showError('Please fill in at least one button with text');
       return;
     }
     
@@ -2300,11 +2301,26 @@ async function sendButtonsMessage() {
       body: JSON.stringify(payload)
     });
     
-    const data = await res.json();
     const container = document.getElementById('sendButtonsContainer');
     
     if (container) {
       container.classList.remove('hidden');
+      
+      let data;
+      try {
+        const text = await res.text();
+        if (!text) {
+          throw new Error('Empty response from server');
+        }
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        const errorMsg = res.status === 401 ? 'Unauthorized: Please check your token' : 
+                        res.status === 500 ? 'Server error: Please try again later' :
+                        `Failed to send message: ${res.statusText || 'Unknown error'}`;
+        container.innerHTML = `<div class="ui error message">${errorMsg}</div>`;
+        return;
+      }
       
       if (res.ok && data.code === 200 && data.success) {
         const messageId = data.data?.Id || uuid;
@@ -2320,8 +2336,8 @@ async function sendButtonsMessage() {
                 <small>Unique identifier for this button</small>
               </div>
               <div class="field">
-                <label>Button Text</label>
-                <input type="text" class="button-text" placeholder="Button Label" maxlength="20">
+                <label>Button Text <span class="required">*</span></label>
+                <input type="text" class="button-text" placeholder="Button Label" maxlength="20" required>
                 <small>Text displayed on button (max 20 chars)</small>
               </div>
             </div>
@@ -2329,7 +2345,7 @@ async function sendButtonsMessage() {
           updateButtonControls();
         }, 2000);
       } else {
-        const errorMsg = data.error || data.message || (data.data && data.data.error) || 'Unknown error';
+        const errorMsg = data.error || data.message || (data.data && typeof data.data === 'string' ? data.data : (data.data && data.data.error)) || `HTTP ${res.status}: ${res.statusText}`;
         container.innerHTML = `<div class="ui error message">Failed to send message: ${errorMsg}</div>`;
       }
     }
@@ -2606,11 +2622,26 @@ async function sendListMessage() {
       body: JSON.stringify(payload)
     });
     
-    const data = await res.json();
     const container = document.getElementById('sendListContainer');
     
     if (container) {
       container.classList.remove('hidden');
+      
+      let data;
+      try {
+        const text = await res.text();
+        if (!text) {
+          throw new Error('Empty response from server');
+        }
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        const errorMsg = res.status === 401 ? 'Unauthorized: Please check your token' : 
+                        res.status === 500 ? 'Server error: Please try again later' :
+                        `Failed to send list message: ${res.statusText || 'Unknown error'}`;
+        container.innerHTML = `<div class="ui error message">${errorMsg}</div>`;
+        return;
+      }
       
       if (res.ok && data.code === 200 && data.success) {
         const messageId = data.data?.Id || uuid;
@@ -2621,7 +2652,7 @@ async function sendListMessage() {
           resetListForm();
         }, 2000);
       } else {
-        const errorMsg = data.error || data.message || (data.data && data.data.error) || 'Unknown error';
+        const errorMsg = data.error || data.message || (data.data && typeof data.data === 'string' ? data.data : (data.data && data.data.error)) || `HTTP ${res.status}: ${res.statusText}`;
         container.innerHTML = `<div class="ui error message">Failed to send list message: ${errorMsg}</div>`;
       }
     }

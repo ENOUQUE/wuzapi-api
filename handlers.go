@@ -1842,6 +1842,14 @@ func (s *server) SendButtons() http.HandlerFunc {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("buttons cant more than 3"))
 			return
 		}
+		
+		// Validate that all buttons have ButtonText
+		for i, btn := range t.Buttons {
+			if strings.TrimSpace(btn.ButtonText) == "" {
+				s.Respond(w, r, http.StatusBadRequest, errors.New(fmt.Sprintf("ButtonText is required for button %d", i+1)))
+				return
+			}
+		}
 
 		recipient, ok := parseJID(t.Phone)
 		if !ok {
@@ -1857,9 +1865,15 @@ func (s *server) SendButtons() http.HandlerFunc {
 
 		var buttons []*waE2E.ButtonsMessage_Button
 
-		for _, item := range t.Buttons {
+		for i, item := range t.Buttons {
+			// Generate ButtonId if not provided
+			buttonId := item.ButtonId
+			if buttonId == "" {
+				buttonId = fmt.Sprintf("btn_%d", i+1)
+			}
+			
 			buttons = append(buttons, &waE2E.ButtonsMessage_Button{
-				ButtonID:       proto.String(item.ButtonId),
+				ButtonID:       proto.String(buttonId),
 				ButtonText:     &waE2E.ButtonsMessage_Button_ButtonText{DisplayText: proto.String(item.ButtonText)},
 				Type:           waE2E.ButtonsMessage_Button_RESPONSE.Enum(),
 				NativeFlowInfo: &waE2E.ButtonsMessage_Button_NativeFlowInfo{},
