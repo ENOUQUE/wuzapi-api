@@ -1877,6 +1877,7 @@ func (s *server) SendButtons() http.HandlerFunc {
 		})
 	}
 }
+// CERTIFIQUE-SE QUE NÃO HÁ NADA ESCRITO ABAIXO DESTA LINHA
 
 // SendList
 func (s *server) SendList() http.HandlerFunc {
