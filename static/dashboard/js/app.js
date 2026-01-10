@@ -348,68 +348,108 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Send Buttons Message
-  const sendButtonsMessageCard = document.getElementById('sendButtonsMessage');
-  if (sendButtonsMessageCard) {
-    sendButtonsMessageCard.addEventListener('click', function() {
-      const container = document.getElementById('sendButtonsContainer');
-      if (container) {
-        container.innerHTML='';
-        container.classList.add('hidden');
-      }
-      // Reset form and initialize
-      const buttonsForm = document.getElementById('sendButtonsForm');
-      if (buttonsForm) {
-        buttonsForm.reset();
-      }
-      $('#buttonsContainer').html(`
-        <div class="two fields button-field">
-          <div class="field">
-            <label>Button ID</label>
-            <input type="text" class="button-id" placeholder="unique-id-1" maxlength="256">
-            <small>Unique identifier for this button</small>
-          </div>
-          <div class="field">
-            <label>Button Text <span class="required">*</span></label>
-            <input type="text" class="button-text" placeholder="Button Label" maxlength="20" required>
-            <small>Text displayed on button (max 20 chars)</small>
-          </div>
+  // Send Buttons Message - using event delegation to handle dynamically shown cards
+  $(document).on('click', '#sendButtonsMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Send Buttons Message card clicked');
+    
+    const container = document.getElementById('sendButtonsContainer');
+    if (container) {
+      container.innerHTML='';
+      container.classList.add('hidden');
+    }
+    // Reset form and initialize
+    const buttonsForm = document.getElementById('sendButtonsForm');
+    if (buttonsForm) {
+      buttonsForm.reset();
+    }
+    $('#buttonsContainer').html(`
+      <div class="button-field">
+        <div class="field">
+          <label>Button Type <span class="required">*</span></label>
+          <select class="ui dropdown button-type" required>
+            <option value="id">ID (Response Button)</option>
+            <option value="phoneNumber">Phone Number</option>
+            <option value="url">URL</option>
+          </select>
+          <small>Type of button action</small>
         </div>
-      `);
-      updateButtonControls();
+        <div class="field button-id-field">
+          <label>Button ID</label>
+          <input type="text" class="button-id" placeholder="unique-id-1" maxlength="256">
+          <small>Unique identifier for response button</small>
+        </div>
+        <div class="field button-phone-field" style="display: none;">
+          <label>Phone Number <span class="required">*</span></label>
+          <input type="text" class="button-phone" placeholder="5521989848442" maxlength="20">
+          <small>Phone number to call (with country code, no +)</small>
+        </div>
+        <div class="field button-url-field" style="display: none;">
+          <label>URL <span class="required">*</span></label>
+          <input type="url" class="button-url" placeholder="https://example.com" maxlength="500">
+          <small>URL to open when button is clicked</small>
+        </div>
+        <div class="field">
+          <label>Button Text <span class="required">*</span></label>
+          <input type="text" class="button-text" placeholder="Button Label" maxlength="20" required>
+          <small>Text displayed on button (max 20 chars)</small>
+        </div>
+      </div>
+    `);
+    // Initialize dropdown and handlers
+    $('#buttonsContainer .ui.dropdown').dropdown();
+    $('#buttonsContainer .button-type').on('change', function() {
+      const type = $(this).val();
+      const field = $(this).closest('.button-field');
+      field.find('.button-id-field').toggle(type === 'id');
+      field.find('.button-phone-field').toggle(type === 'phoneNumber');
+      field.find('.button-url-field').toggle(type === 'url');
+    });
+    updateButtonControls();
+    
+    // Initialize modal if not already initialized
+    if (!$('#modalSendButtonsMessage').hasClass('ui modal')) {
       $('#modalSendButtonsMessage').modal({
         onApprove: function() {
           sendButtonsMessage();
           return false;
         }
-      }).modal('show');
-    });
-  }
+      });
+    }
+    $('#modalSendButtonsMessage').modal('show');
+  });
 
-  // Send List Message
-  const sendListMessageCard = document.getElementById('sendListMessage');
-  if (sendListMessageCard) {
-    sendListMessageCard.addEventListener('click', function() {
-      const container = document.getElementById('sendListContainer');
-      if (container) {
-        container.innerHTML='';
-        container.classList.add('hidden');
-      }
-      // Reset form and initialize
-      const listForm = document.getElementById('sendListForm');
-      if (listForm) {
-        listForm.reset();
-      }
-      resetListForm();
-      updateSectionControls();
+  // Send List Message - using event delegation to handle dynamically shown cards
+  $(document).on('click', '#sendListMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Send List Message card clicked');
+    
+    const container = document.getElementById('sendListContainer');
+    if (container) {
+      container.innerHTML='';
+      container.classList.add('hidden');
+    }
+    // Reset form and initialize
+    const listForm = document.getElementById('sendListForm');
+    if (listForm) {
+      listForm.reset();
+    }
+    resetListForm();
+    updateSectionControls();
+    
+    // Initialize modal if not already initialized
+    if (!$('#modalSendListMessage').hasClass('ui modal')) {
       $('#modalSendListMessage').modal({
         onApprove: function() {
           sendListMessage();
           return false;
         }
-      }).modal('show');
-    });
-  }
+      });
+    }
+    $('#modalSendListMessage').modal('show');
+  });
 
   // Add/Remove Buttons
   const addButtonBtn = document.getElementById('addButtonBtn');
@@ -2186,25 +2226,58 @@ function addButtonField() {
   const container = $('#buttonsContainer');
   const buttonFields = container.find('.button-field');
   
-  if (buttonFields.length >= 3) {
-    showError('Maximum of 3 buttons allowed');
+  if (buttonFields.length >= 5) {
+    showError('Maximum of 5 buttons allowed');
     return;
   }
   
-  container.append(`
-    <div class="two fields button-field">
+  const newField = $(`
+    <div class="button-field">
       <div class="field">
+        <label>Button Type <span class="required">*</span></label>
+        <select class="ui dropdown button-type" required>
+          <option value="id">ID (Response Button)</option>
+          <option value="phoneNumber">Phone Number</option>
+          <option value="url">URL</option>
+        </select>
+        <small>Type of button action</small>
+      </div>
+      <div class="field button-id-field">
         <label>Button ID</label>
         <input type="text" class="button-id" placeholder="unique-id-${buttonFields.length + 1}" maxlength="256">
-        <small>Unique identifier for this button</small>
+        <small>Unique identifier for response button</small>
+      </div>
+      <div class="field button-phone-field" style="display: none;">
+        <label>Phone Number <span class="required">*</span></label>
+        <input type="text" class="button-phone" placeholder="5521989848442" maxlength="20">
+        <small>Phone number to call (with country code, no +)</small>
+      </div>
+      <div class="field button-url-field" style="display: none;">
+        <label>URL <span class="required">*</span></label>
+        <input type="url" class="button-url" placeholder="https://example.com" maxlength="500">
+        <small>URL to open when button is clicked</small>
       </div>
       <div class="field">
-        <label>Button Text</label>
-        <input type="text" class="button-text" placeholder="Button Label" maxlength="20">
+        <label>Button Text <span class="required">*</span></label>
+        <input type="text" class="button-text" placeholder="Button Label" maxlength="20" required>
         <small>Text displayed on button (max 20 chars)</small>
       </div>
     </div>
   `);
+  
+  container.append(newField);
+  
+  // Initialize dropdown
+  newField.find('.ui.dropdown').dropdown();
+  
+  // Handle type change
+  newField.find('.button-type').on('change', function() {
+    const type = $(this).val();
+    const field = $(this).closest('.button-field');
+    field.find('.button-id-field').toggle(type === 'id');
+    field.find('.button-phone-field').toggle(type === 'phoneNumber');
+    field.find('.button-url-field').toggle(type === 'url');
+  });
   
   updateButtonControls();
 }
@@ -2226,7 +2299,7 @@ function updateButtonControls() {
   const addBtn = $('#addButtonBtn');
   const removeBtn = $('#removeButtonBtn');
   
-  if (buttonFields.length >= 3) {
+  if (buttonFields.length >= 5) {
     addBtn.prop('disabled', true);
   } else {
     addBtn.prop('disabled', false);
@@ -2243,6 +2316,7 @@ async function sendButtonsMessage() {
   try {
     const phone = $('#buttonssendphone').val().trim();
     const title = $('#buttonssendtitle').val().trim();
+    const footer = $('#buttonssendfooter').val().trim();
     
     if (!phone || !title) {
       showError('Please fill in all required fields');
@@ -2258,26 +2332,59 @@ async function sendButtonsMessage() {
       return;
     }
     
+    let hasError = false;
     buttonFields.each(function() {
+      if (hasError) return false;
+      
+      const buttonType = $(this).find('.button-type').val() || 'id';
       const buttonId = $(this).find('.button-id').val().trim();
+      const buttonPhone = $(this).find('.button-phone').val().trim();
+      const buttonUrl = $(this).find('.button-url').val().trim();
       const buttonText = $(this).find('.button-text').val().trim();
       
-      // ButtonText is required, ButtonId is optional (will be generated if not provided)
-      if (buttonText) {
-        buttons.push({
-          ButtonId: buttonId || `btn_${buttons.length + 1}`,
-          ButtonText: buttonText
-        });
+      if (!buttonText) {
+        return true; // Skip if no text
       }
+      
+      const button = {
+        text: buttonText
+      };
+      
+      // Add button based on type
+      if (buttonType === 'phoneNumber') {
+        if (!buttonPhone) {
+          showError('Phone number is required for phone number buttons');
+          hasError = true;
+          return false; // Stop iteration
+        }
+        button.phoneNumber = buttonPhone;
+      } else if (buttonType === 'url') {
+        if (!buttonUrl) {
+          showError('URL is required for URL buttons');
+          hasError = true;
+          return false; // Stop iteration
+        }
+        button.url = buttonUrl;
+      } else {
+        // ID button
+        button.id = buttonId || `btn_${buttons.length + 1}`;
+      }
+      
+      buttons.push(button);
+      return true;
     });
+    
+    if (hasError) {
+      return;
+    }
     
     if (buttons.length === 0) {
       showError('Please fill in at least one button with text');
       return;
     }
     
-    if (buttons.length > 3) {
-      showError('Maximum of 3 buttons allowed');
+    if (buttons.length > 5) {
+      showError('Maximum of 5 buttons allowed');
       return;
     }
     
@@ -2287,10 +2394,14 @@ async function sendButtonsMessage() {
     myHeaders.append('Content-Type', 'application/json');
     
     const payload = {
-      Phone: phone,
-      Title: title,
-      Buttons: buttons
+      number: phone,
+      text: title,
+      buttons: buttons
     };
+    
+    if (footer) {
+      payload.footer = footer;
+    }
     
     const uuid = generateMessageUUID();
     payload.Id = uuid;
@@ -2329,11 +2440,30 @@ async function sendButtonsMessage() {
         setTimeout(() => {
           $('#sendButtonsForm')[0].reset();
           $('#buttonsContainer').html(`
-            <div class="two fields button-field">
+            <div class="button-field">
               <div class="field">
+                <label>Button Type <span class="required">*</span></label>
+                <select class="ui dropdown button-type" required>
+                  <option value="id">ID (Response Button)</option>
+                  <option value="phoneNumber">Phone Number</option>
+                  <option value="url">URL</option>
+                </select>
+                <small>Type of button action</small>
+              </div>
+              <div class="field button-id-field">
                 <label>Button ID</label>
                 <input type="text" class="button-id" placeholder="unique-id-1" maxlength="256">
-                <small>Unique identifier for this button</small>
+                <small>Unique identifier for response button</small>
+              </div>
+              <div class="field button-phone-field" style="display: none;">
+                <label>Phone Number <span class="required">*</span></label>
+                <input type="text" class="button-phone" placeholder="5521989848442" maxlength="20">
+                <small>Phone number to call (with country code, no +)</small>
+              </div>
+              <div class="field button-url-field" style="display: none;">
+                <label>URL <span class="required">*</span></label>
+                <input type="url" class="button-url" placeholder="https://example.com" maxlength="500">
+                <small>URL to open when button is clicked</small>
               </div>
               <div class="field">
                 <label>Button Text <span class="required">*</span></label>
@@ -2342,6 +2472,15 @@ async function sendButtonsMessage() {
               </div>
             </div>
           `);
+          // Initialize dropdown and handlers
+          $('#buttonsContainer .ui.dropdown').dropdown();
+          $('#buttonsContainer .button-type').on('change', function() {
+            const type = $(this).val();
+            const field = $(this).closest('.button-field');
+            field.find('.button-id-field').toggle(type === 'id');
+            field.find('.button-phone-field').toggle(type === 'phoneNumber');
+            field.find('.button-url-field').toggle(type === 'url');
+          });
           updateButtonControls();
         }, 2000);
       } else {
@@ -2566,8 +2705,8 @@ async function sendListMessage() {
         if (rowTitle) {
           rows.push({
             title: rowTitle,
-            desc: rowDesc || '',
-            RowId: rowId || rowTitle
+            descriptions: rowDesc || '',
+            id: rowId || rowTitle
           });
         }
       });
@@ -2602,15 +2741,15 @@ async function sendListMessage() {
     myHeaders.append('Content-Type', 'application/json');
     
     const payload = {
-      Phone: phone,
-      TopText: topText,
-      Desc: desc,
-      ButtonText: buttonText,
-      Sections: sections
+      number: phone,
+      title: topText,
+      body: desc,
+      titleListButton: buttonText,
+      sections: sections
     };
     
     if (footerText) {
-      payload.FooterText = footerText;
+      payload.footer = footerText;
     }
     
     const uuid = generateMessageUUID();

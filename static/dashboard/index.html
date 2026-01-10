@@ -885,16 +885,40 @@
           <small>This is the message that appears above the buttons (max 1024 characters)</small>
         </div>
         <div class="field">
+          <label>Footer Text (Optional)</label>
+          <input id="buttonssendfooter" type="text" placeholder="Footer text" maxlength="60">
+          <small>Footer text that appears below the buttons (max 60 characters, optional)</small>
+        </div>
+        <div class="field">
           <label>Buttons <span class="required">*</span></label>
           <div class="ui info message">
-            <i class="info circle icon"></i> You can add up to 3 buttons. Each button text must be up to 20 characters.
+            <i class="info circle icon"></i> You can add up to 5 buttons. Each button text must be up to 20 characters. Choose button type: ID (response), Phone Number, or URL.
           </div>
           <div id="buttonsContainer">
-            <div class="two fields button-field">
+            <div class="button-field">
               <div class="field">
+                <label>Button Type <span class="required">*</span></label>
+                <select class="ui dropdown button-type" required>
+                  <option value="id">ID (Response Button)</option>
+                  <option value="phoneNumber">Phone Number</option>
+                  <option value="url">URL</option>
+                </select>
+                <small>Type of button action</small>
+              </div>
+              <div class="field button-id-field">
                 <label>Button ID</label>
                 <input type="text" class="button-id" placeholder="unique-id-1" maxlength="256">
-                <small>Unique identifier for this button</small>
+                <small>Unique identifier for response button</small>
+              </div>
+              <div class="field button-phone-field" style="display: none;">
+                <label>Phone Number <span class="required">*</span></label>
+                <input type="text" class="button-phone" placeholder="5521989848442" maxlength="20">
+                <small>Phone number to call (with country code, no +)</small>
+              </div>
+              <div class="field button-url-field" style="display: none;">
+                <label>URL <span class="required">*</span></label>
+                <input type="url" class="button-url" placeholder="https://example.com" maxlength="500">
+                <small>URL to open when button is clicked</small>
               </div>
               <div class="field">
                 <label>Button Text <span class="required">*</span></label>
@@ -943,8 +967,8 @@
           <small>Description text (max 72 characters)</small>
         </div>
         <div class="field">
-          <label>Button Text <span class="required">*</span></label>
-          <input id="listsendbuttontext" type="text" placeholder="Open Menu" maxlength="20" required>
+          <label>Button Text / Title List Button <span class="required">*</span></label>
+          <input id="listsendbuttontext" type="text" placeholder="SELECIONE UMA OPÇÃO" maxlength="20" required>
           <small>Text on the button that opens the list (max 20 characters)</small>
         </div>
         <div class="field">
