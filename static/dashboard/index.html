@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WuzAPI</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.4/dist/semantic.min.css">
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="/dashboard/css/app.css">
 </head>
 <body>
 
@@ -182,6 +182,18 @@
         <div class="content"><a class="ui blue right ribbon label">Chat</a>
           <div class="header">Send Text Message</div>
           <div class="description"> Sends a text message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendButtonsMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Buttons Message</div>
+          <div class="description"> Sends a message with interactive buttons (up to 3 buttons).</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendListMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send List Message</div>
+          <div class="description"> Sends a message with a selectable list menu.</div>
         </div>
       </div>
       <div class="blue card hidden widget" style="cursor: pointer;" id="deleteMessage">
@@ -857,6 +869,145 @@
     </div>
   </div>
 
+  <!-- Send Buttons Message Modal -->
+  <div class="ui modal" id="modalSendButtonsMessage"><i class="close icon"></i>
+    <div class="header"> Send Buttons Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendButtonsContainer"></div>
+      <div class="ui form" id="sendButtonsForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="buttonssendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Title/Message Text <span class="required">*</span></label>
+          <textarea id="buttonssendtitle" placeholder="Message text that will appear above the buttons" rows="3" required></textarea>
+          <small>This is the message that appears above the buttons (max 1024 characters)</small>
+        </div>
+        <div class="field">
+          <label>Buttons <span class="required">*</span></label>
+          <div class="ui info message">
+            <i class="info circle icon"></i> You can add up to 3 buttons. Each button text must be up to 20 characters.
+          </div>
+          <div id="buttonsContainer">
+            <div class="two fields button-field">
+              <div class="field">
+                <label>Button ID</label>
+                <input type="text" class="button-id" placeholder="unique-id-1" maxlength="256">
+                <small>Unique identifier for this button</small>
+              </div>
+              <div class="field">
+                <label>Button Text</label>
+                <input type="text" class="button-text" placeholder="Button Label" maxlength="20">
+                <small>Text displayed on button (max 20 chars)</small>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="ui button" id="addButtonBtn">
+            <i class="plus icon"></i> Add Button
+          </button>
+          <button type="button" class="ui button" id="removeButtonBtn" style="display: none;">
+            <i class="minus icon"></i> Remove Last Button
+          </button>
+        </div>
+        <div class="ui error message"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendButtonsSubmit">
+        Send
+        <i class="checkmark icon"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send List Message Modal -->
+  <div class="ui large modal" id="modalSendListMessage"><i class="close icon"></i>
+    <div class="header"> Send List Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendListContainer"></div>
+      <div class="ui form" id="sendListForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="listsendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Title <span class="required">*</span></label>
+          <input id="listsendtitle" type="text" placeholder="List title" maxlength="60" required>
+          <small>Title of the list (max 60 characters)</small>
+        </div>
+        <div class="field">
+          <label>Description <span class="required">*</span></label>
+          <textarea id="listsenddesc" placeholder="List description" rows="2" maxlength="72" required></textarea>
+          <small>Description text (max 72 characters)</small>
+        </div>
+        <div class="field">
+          <label>Button Text <span class="required">*</span></label>
+          <input id="listsendbuttontext" type="text" placeholder="Open Menu" maxlength="20" required>
+          <small>Text on the button that opens the list (max 20 characters)</small>
+        </div>
+        <div class="field">
+          <label>Footer Text (Optional)</label>
+          <input id="listsendfooter" type="text" placeholder="Footer text" maxlength="60">
+          <small>Footer text (max 60 characters, optional)</small>
+        </div>
+        <div class="ui divider"></div>
+        <h4 class="ui dividing header">List Items</h4>
+        <div class="ui info message">
+          <i class="info circle icon"></i> You can add up to 10 items per section. You can have multiple sections with different titles.
+        </div>
+        <div id="listSectionsContainer">
+          <div class="list-section">
+            <div class="field">
+              <label>Section Title</label>
+              <input type="text" class="section-title" placeholder="Section Name" maxlength="24">
+            </div>
+            <div class="list-items-container">
+              <div class="three fields list-item-field">
+                <div class="field">
+                  <label>Row ID</label>
+                  <input type="text" class="row-id" placeholder="item1" maxlength="200">
+                  <small>Unique identifier</small>
+                </div>
+                <div class="field">
+                  <label>Title</label>
+                  <input type="text" class="row-title" placeholder="Item Title" maxlength="24" required>
+                  <small>Item title (max 24 chars)</small>
+                </div>
+                <div class="field">
+                  <label>Description</label>
+                  <input type="text" class="row-desc" placeholder="Item description" maxlength="72">
+                  <small>Optional description (max 72 chars)</small>
+                </div>
+              </div>
+            </div>
+            <button type="button" class="ui small button add-list-item-btn">
+              <i class="plus icon"></i> Add Item to Section
+            </button>
+            <button type="button" class="ui small button remove-list-item-btn" style="display: none;">
+              <i class="minus icon"></i> Remove Last Item
+            </button>
+          </div>
+        </div>
+        <button type="button" class="ui button" id="addSectionBtn">
+          <i class="plus icon"></i> Add Section
+        </button>
+        <button type="button" class="ui button" id="removeSectionBtn" style="display: none;">
+          <i class="minus icon"></i> Remove Last Section
+        </button>
+        <div class="ui error message"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendListSubmit">
+        Send
+        <i class="checkmark icon"></i>
+      </div>
+    </div>
+  </div>
+
   <!-- Groups Modals -->
 
   <!-- Group Details Modal -->
@@ -1297,7 +1448,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.4/dist/semantic.min.js"></script>
-  <script src="js/app.js"></script>
-  <script src="js/groups.js"></script>
+  <script src="/dashboard/js/app.js"></script>
+  <script src="/dashboard/js/groups.js"></script>
 </body>
 </html>

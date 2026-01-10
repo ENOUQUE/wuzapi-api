@@ -18,6 +18,36 @@ body {
   font-family: "Helvetica Neue", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
 }
 
+.required {
+  color: #db2828;
+  font-weight: bold;
+}
+
+.button-field {
+  margin-bottom: 1em;
+  padding: 1em;
+  background-color: #f9fafb;
+  border-radius: 4px;
+}
+
+.list-section {
+  margin-bottom: 1.5em;
+  padding: 1em;
+  background-color: #f9fafb;
+  border-radius: 4px;
+}
+
+.list-item-field {
+  margin-bottom: 0.5em;
+  padding: 0.5em;
+  background-color: #ffffff;
+  border-radius: 4px;
+}
+
+.list-items-container {
+  margin: 1em 0;
+}
+
 body > .ui.logingrid {
   height: 100%;
   max-width: 800px !important;

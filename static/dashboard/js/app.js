@@ -6,6 +6,7 @@ let updateInterval = 5000;
 let instanceToDelete = null;
 let isAdminLogin = false;
 let currentInstanceData = null;
+let scanInterval = null;
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -183,192 +184,417 @@ document.addEventListener('DOMContentLoaded', function() {
     return false;
   });
 
-  document.getElementById('pairphoneinput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      const phone = pairPhoneInput.value.trim();
-      if (phone) {
-        connect().then((data) => {
-          if(data.success==true) {
-            pairPhone(phone)
-              .then((data) => {
-                document.getElementById('pairHelp').classList.add('hidden');;
-                // Success case
-                if (data.success && data.data && data.data.LinkingCode) {
-                  document.getElementById('pairInfo').innerHTML = `Your link code is: ${data.data.LinkingCode}`;
-                  scanInterval = setInterval(checkStatus, 1000);
-                } else {
-                  document.getElementById('pairInfo').innerHTML = "Problem getting pairing code";
-                }
-              })
-              .catch((error) => {
-                // Error case
-                document.getElementById('pairInfo').innerHTML = "Problem getting pairing code";
-                console.error('Pairing error:', error);
-              });
-          }
-      });
+  const pairPhoneInput = document.getElementById('pairphoneinput');
+  if (pairPhoneInput) {
+    pairPhoneInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        const phone = pairPhoneInput.value.trim();
+        if (phone) {
+          connect().then((data) => {
+            if(data.success==true) {
+              pairPhone(phone)
+                .then((data) => {
+                  const pairHelp = document.getElementById('pairHelp');
+                  if (pairHelp) {
+                    pairHelp.classList.add('hidden');
+                  }
+                  // Success case
+                  if (data.success && data.data && data.data.LinkingCode) {
+                    const pairInfo = document.getElementById('pairInfo');
+                    if (pairInfo) {
+                      pairInfo.innerHTML = `Your link code is: ${data.data.LinkingCode}`;
+                    }
+                    // Clear any existing interval
+                    if (scanInterval) {
+                      clearInterval(scanInterval);
+                    }
+                    // Start checking status
+                    scanInterval = setInterval(function() {
+                      status().then((result) => {
+                        if (result.success && result.data && result.data.loggedIn) {
+                          if (scanInterval) {
+                            clearInterval(scanInterval);
+                            scanInterval = null;
+                          }
+                          scanned = true;
+                          // Reload page or update UI
+                          window.location.reload();
+                        }
+                      });
+                    }, 1000);
+                  } else {
+                    const pairInfo = document.getElementById('pairInfo');
+                    if (pairInfo) {
+                      pairInfo.innerHTML = "Problem getting pairing code";
+                    }
+                  }
+                })
+                .catch((error) => {
+                  // Error case
+                  const pairInfo = document.getElementById('pairInfo');
+                  if (pairInfo) {
+                    pairInfo.innerHTML = "Problem getting pairing code";
+                  }
+                  console.error('Pairing error:', error);
+                });
+            }
+          });
+        }
       }
-    }
-  });
+    });
+  }
 
-  document.getElementById('userinfoinput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      doUserInfo();
-    }
-  });
+  const userInfoInput = document.getElementById('userinfoinput');
+  if (userInfoInput) {
+    userInfoInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        doUserInfo();
+      }
+    });
+  }
  
-  document.getElementById('useravatarinput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      doUserAvatar();
-    }
-  });
+  const userAvatarInput = document.getElementById('useravatarinput');
+  if (userAvatarInput) {
+    userAvatarInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        doUserAvatar();
+      }
+    });
+  }
 
-  document.getElementById('userInfo').addEventListener('click', function() {
-    document.getElementById('userInfoContainer').innerHTML='';
-    document.getElementById("userInfoContainer").classList.add('hidden');
-    $('#modalUserInfo').modal({onApprove: function() {
-      doUserInfo();
-      return false;
-    }}).modal('show');
-  });
+  const userInfoCard = document.getElementById('userInfo');
+  if (userInfoCard) {
+    userInfoCard.addEventListener('click', function() {
+      const container = document.getElementById('userInfoContainer');
+      if (container) {
+        container.innerHTML='';
+        container.classList.add('hidden');
+      }
+      $('#modalUserInfo').modal({onApprove: function() {
+        doUserInfo();
+        return false;
+      }}).modal('show');
+    });
+  }
 
-  document.getElementById('userAvatar').addEventListener('click', function() {
-    document.getElementById('userAvatarContainer').innerHTML='';
-    document.getElementById("userAvatarContainer").classList.add('hidden');
-    $('#modalUserAvatar').modal({onApprove: function() {
-      doUserAvatar();
-      return false;
-    }}).modal('show');
-  });
+  const userAvatarCard = document.getElementById('userAvatar');
+  if (userAvatarCard) {
+    userAvatarCard.addEventListener('click', function() {
+      const container = document.getElementById('userAvatarContainer');
+      if (container) {
+        container.innerHTML='';
+        container.classList.add('hidden');
+      }
+      $('#modalUserAvatar').modal({onApprove: function() {
+        doUserAvatar();
+        return false;
+      }}).modal('show');
+    });
+  }
 
-  document.getElementById('sendTextMessage').addEventListener('click', function() {
-    document.getElementById('sendMessageContainer').innerHTML='';
-    document.getElementById("sendMessageContainer").classList.add('hidden');
-    $('#modalSendTextMessage').modal({onApprove: function() {
-      sendTextMessage().then((result)=>{
-        document.getElementById("sendMessageContainer").classList.remove('hidden');
-        if(result.success===true) {
-           document.getElementById('sendMessageContainer').innerHTML=`Message sent successfully. Id: ${result.data.Id}`
-        } else {
-           document.getElementById('sendMessageContainer').innerHTML=`Problem sending message: ${result.error}`
-        }
-      });
-      return false;
-    }}).modal('show');
-  });
+  const sendTextMessageCard = document.getElementById('sendTextMessage');
+  if (sendTextMessageCard) {
+    sendTextMessageCard.addEventListener('click', function() {
+      const container = document.getElementById('sendMessageContainer');
+      if (container) {
+        container.innerHTML='';
+        container.classList.add('hidden');
+      }
+      $('#modalSendTextMessage').modal({onApprove: function() {
+        sendTextMessage().then((result)=>{
+          if (container) {
+            container.classList.remove('hidden');
+            if(result.success===true) {
+               container.innerHTML=`Message sent successfully. Id: ${result.data.Id}`
+            } else {
+               container.innerHTML=`Problem sending message: ${result.error}`
+            }
+          }
+        });
+        return false;
+      }}).modal('show');
+    });
+  }
  
-  document.getElementById('deleteMessage').addEventListener('click', function() {
-    document.getElementById('deleteMessageContainer').innerHTML='';
-    document.getElementById("deleteMessageContainer").classList.add('hidden');
-    $('#modalDeleteMessage').modal({onApprove: function() {
-      deleteMessage().then((result)=>{
-        console.log(result);
-        document.getElementById("deleteMessageContainer").classList.remove('hidden');
-        if(result.success===true) {
-           document.getElementById('deleteMessageContainer').innerHTML=`Message deleted successfully.`
-        } else {
-           document.getElementById('deleteMessageContainer').innerHTML=`Problem deleting message: ${result.error}`
-        }
-      });
-      return false;
-    }}).modal('show');
-  });
+  const deleteMessageCard = document.getElementById('deleteMessage');
+  if (deleteMessageCard) {
+    deleteMessageCard.addEventListener('click', function() {
+      const container = document.getElementById('deleteMessageContainer');
+      if (container) {
+        container.innerHTML='';
+        container.classList.add('hidden');
+      }
+      $('#modalDeleteMessage').modal({onApprove: function() {
+        deleteMessage().then((result)=>{
+          console.log(result);
+          if (container) {
+            container.classList.remove('hidden');
+            if(result.success===true) {
+               container.innerHTML=`Message deleted successfully.`
+            } else {
+               container.innerHTML=`Problem deleting message: ${result.error}`
+            }
+          }
+        });
+        return false;
+      }}).modal('show');
+    });
+  }
   
-  document.getElementById('userContacts').addEventListener('click', function() {
-    getContacts();
+  const userContactsCard = document.getElementById('userContacts');
+  if (userContactsCard) {
+    userContactsCard.addEventListener('click', function() {
+      getContacts();
+    });
+  }
+
+  // Send Buttons Message
+  const sendButtonsMessageCard = document.getElementById('sendButtonsMessage');
+  if (sendButtonsMessageCard) {
+    sendButtonsMessageCard.addEventListener('click', function() {
+      const container = document.getElementById('sendButtonsContainer');
+      if (container) {
+        container.innerHTML='';
+        container.classList.add('hidden');
+      }
+      // Reset form and initialize
+      const buttonsForm = document.getElementById('sendButtonsForm');
+      if (buttonsForm) {
+        buttonsForm.reset();
+      }
+      $('#buttonsContainer').html(`
+        <div class="two fields button-field">
+          <div class="field">
+            <label>Button ID</label>
+            <input type="text" class="button-id" placeholder="unique-id-1" maxlength="256">
+            <small>Unique identifier for this button</small>
+          </div>
+          <div class="field">
+            <label>Button Text <span class="required">*</span></label>
+            <input type="text" class="button-text" placeholder="Button Label" maxlength="20" required>
+            <small>Text displayed on button (max 20 chars)</small>
+          </div>
+        </div>
+      `);
+      updateButtonControls();
+      $('#modalSendButtonsMessage').modal({
+        onApprove: function() {
+          sendButtonsMessage();
+          return false;
+        }
+      }).modal('show');
+    });
+  }
+
+  // Send List Message
+  const sendListMessageCard = document.getElementById('sendListMessage');
+  if (sendListMessageCard) {
+    sendListMessageCard.addEventListener('click', function() {
+      const container = document.getElementById('sendListContainer');
+      if (container) {
+        container.innerHTML='';
+        container.classList.add('hidden');
+      }
+      // Reset form and initialize
+      const listForm = document.getElementById('sendListForm');
+      if (listForm) {
+        listForm.reset();
+      }
+      resetListForm();
+      updateSectionControls();
+      $('#modalSendListMessage').modal({
+        onApprove: function() {
+          sendListMessage();
+          return false;
+        }
+      }).modal('show');
+    });
+  }
+
+  // Add/Remove Buttons
+  const addButtonBtn = document.getElementById('addButtonBtn');
+  if (addButtonBtn) {
+    addButtonBtn.addEventListener('click', function() {
+      addButtonField();
+    });
+  }
+
+  const removeButtonBtn = document.getElementById('removeButtonBtn');
+  if (removeButtonBtn) {
+    removeButtonBtn.addEventListener('click', function() {
+      removeButtonField();
+    });
+  }
+
+  // Send Buttons Submit
+  const sendButtonsSubmit = document.getElementById('sendButtonsSubmit');
+  if (sendButtonsSubmit) {
+    sendButtonsSubmit.addEventListener('click', function() {
+      sendButtonsMessage();
+    });
+  }
+
+  // Send List Submit
+  const sendListSubmit = document.getElementById('sendListSubmit');
+  if (sendListSubmit) {
+    sendListSubmit.addEventListener('click', function() {
+      sendListMessage();
+    });
+  }
+
+  // List Section Controls - using event delegation since sections are added dynamically
+  $(document).on('click', '#addSectionBtn', function() {
+    addListSection();
+  });
+
+  $(document).on('click', '#removeSectionBtn', function() {
+    removeListSection();
+  });
+
+  // List item controls using event delegation
+  $(document).on('click', '.add-list-item-btn', function() {
+    const section = $(this).closest('.list-section');
+    addListItem(section);
+  });
+
+  $(document).on('click', '.remove-list-item-btn', function() {
+    const section = $(this).closest('.list-section');
+    removeListItem(section);
   });
 
   // S3 Configuration
-  document.getElementById('s3Config').addEventListener('click', function() {
-    $('#modalS3Config').modal({
-      onApprove: function() {
-        saveS3Config();
-        return false;
-      }
-    }).modal('show');
-    loadS3Config();
-  });
+  const s3ConfigCard = document.getElementById('s3Config');
+  if (s3ConfigCard) {
+    s3ConfigCard.addEventListener('click', function() {
+      $('#modalS3Config').modal({
+        onApprove: function() {
+          saveS3Config();
+          return false;
+        }
+      }).modal('show');
+      loadS3Config();
+    });
+  }
 
   // History Configuration
-  document.getElementById('historyConfig').addEventListener('click', function() {
-    $('#modalHistoryConfig').modal({
-      onApprove: function() {
-        saveHistoryConfig();
-        return false;
-      }
-    }).modal('show');
-    loadHistoryConfig();
-  });
+  const historyConfigCard = document.getElementById('historyConfig');
+  if (historyConfigCard) {
+    historyConfigCard.addEventListener('click', function() {
+      $('#modalHistoryConfig').modal({
+        onApprove: function() {
+          saveHistoryConfig();
+          return false;
+        }
+      }).modal('show');
+      loadHistoryConfig();
+    });
+  }
 
   // Proxy Configuration
-  document.getElementById('proxyConfig').addEventListener('click', function() {
-    $('#modalProxyConfig').modal({
-      onApprove: function() {
-        saveProxyConfig();
-        return false;
-      }
-    }).modal('show');
-    loadProxyConfig();
-  });
+  const proxyConfigCard = document.getElementById('proxyConfig');
+  if (proxyConfigCard) {
+    proxyConfigCard.addEventListener('click', function() {
+      $('#modalProxyConfig').modal({
+        onApprove: function() {
+          saveProxyConfig();
+          return false;
+        }
+      }).modal('show');
+      loadProxyConfig();
+    });
+  }
 
   // Webhook Configuration
-  document.getElementById('webhookConfig').addEventListener('click', function() {
-    webhookModal();
-  });
+  const webhookConfigCard = document.getElementById('webhookConfig');
+  if (webhookConfigCard) {
+    webhookConfigCard.addEventListener('click', function() {
+      webhookModal();
+    });
+  }
 
   // S3 Test Connection
-  document.getElementById('testS3Connection').addEventListener('click', function() {
-    testS3Connection();
-  });
+  const testS3ConnectionBtn = document.getElementById('testS3Connection');
+  if (testS3ConnectionBtn) {
+    testS3ConnectionBtn.addEventListener('click', function() {
+      testS3Connection();
+    });
+  }
 
   // S3 Delete Configuration
-  document.getElementById('deleteS3Config').addEventListener('click', function() {
-    deleteS3Config();
-  });
+  const deleteS3ConfigBtn = document.getElementById('deleteS3Config');
+  if (deleteS3ConfigBtn) {
+    deleteS3ConfigBtn.addEventListener('click', function() {
+      deleteS3Config();
+    });
+  }
 
   // HMAC Configuration
-  document.getElementById('hmacConfig').addEventListener('click', function() {
-    $('#modalHmacConfig').modal({
-      onApprove: function() {
-        saveHmacConfig();
-        return false;
-      }
-    }).modal('show');
-    loadHmacConfig();
-  });
+  const hmacConfigCard = document.getElementById('hmacConfig');
+  if (hmacConfigCard) {
+    hmacConfigCard.addEventListener('click', function() {
+      $('#modalHmacConfig').modal({
+        onApprove: function() {
+          saveHmacConfig();
+          return false;
+        }
+      }).modal('show');
+      loadHmacConfig();
+    });
+  }
 
   // HMAC Generate Key
-  document.getElementById('generateHmacKey').addEventListener('click', function() {
-    generateRandomHmacKey();
-  });
+  const generateHmacKeyBtn = document.getElementById('generateHmacKey');
+  if (generateHmacKeyBtn) {
+    generateHmacKeyBtn.addEventListener('click', function() {
+      generateRandomHmacKey();
+    });
+  }
 
   // HMAC Show/Hide Key
-  document.getElementById('showHmacKey').addEventListener('click', function() {
-    toggleHmacKeyVisibility();
-  });
+  const showHmacKeyBtn = document.getElementById('showHmacKey');
+  if (showHmacKeyBtn) {
+    showHmacKeyBtn.addEventListener('click', function() {
+      toggleHmacKeyVisibility();
+    });
+  }
 
-  document.getElementById('hideHmacKey').addEventListener('click', function() {
-    toggleHmacKeyVisibility();
-  });
+  const hideHmacKeyBtn = document.getElementById('hideHmacKey');
+  if (hideHmacKeyBtn) {
+    hideHmacKeyBtn.addEventListener('click', function() {
+      toggleHmacKeyVisibility();
+    });
+  }
 
   // HMAC Delete Configuration
-  document.getElementById('deleteHmacConfig').addEventListener('click', function() {
-    deleteHmacConfig();
-  });
+  const deleteHmacConfigBtn = document.getElementById('deleteHmacConfig');
+  if (deleteHmacConfigBtn) {
+    deleteHmacConfigBtn.addEventListener('click', function() {
+      deleteHmacConfig();
+    });
+  }
 
   // HMAC Instance Generate Key
-  document.getElementById('generateHmacKeyInstance').addEventListener('click', function() {
-    generateRandomHmacKeyInstance();
-  });
+  const generateHmacKeyInstanceBtn = document.getElementById('generateHmacKeyInstance');
+  if (generateHmacKeyInstanceBtn) {
+    generateHmacKeyInstanceBtn.addEventListener('click', function() {
+      generateRandomHmacKeyInstance();
+    });
+  }
 
   // HMAC Instance Show/Hide Key
-  document.getElementById('showHmacKeyInstance').addEventListener('click', function() {
-    toggleHmacKeyVisibilityInstance();
-  });
+  const showHmacKeyInstanceBtn = document.getElementById('showHmacKeyInstance');
+  if (showHmacKeyInstanceBtn) {
+    showHmacKeyInstanceBtn.addEventListener('click', function() {
+      toggleHmacKeyVisibilityInstance();
+    });
+  }
 
-  document.getElementById('hideHmacKeyInstance').addEventListener('click', function() {
-    toggleHmacKeyVisibilityInstance();
-  });
+  const hideHmacKeyInstanceBtn = document.getElementById('hideHmacKeyInstance');
+  if (hideHmacKeyInstanceBtn) {
+    hideHmacKeyInstanceBtn.addEventListener('click', function() {
+      toggleHmacKeyVisibilityInstance();
+    });
+  }
 
   // Proxy checkbox toggle is now initialized in DOMContentLoaded
 
@@ -806,6 +1032,7 @@ async function sendTextMessage() {
 async function deleteMessage() {
   const deletePhone = document.getElementById('messagedeletephone').value.trim();
   const deleteId = document.getElementById('messagedeleteid').value;
+  const token = getLocalStorageItem('token');
   const myHeaders = new Headers();
   myHeaders.append('token', token);
   myHeaders.append('Content-Type', 'application/json');
@@ -1157,7 +1384,6 @@ function init() {
 
   // Starting
   let notoken=0;
-  let scanInterval;
   let token = getLocalStorageItem('token');
   let admintoken = getLocalStorageItem('admintoken');
   let isAdminLogin = getLocalStorageItem('isAdmin');
@@ -1952,5 +2178,455 @@ function toggleHmacKeyVisibilityInstance() {
     input.attr('type', 'password');
     showBtn.show();
     hideBtn.hide();
+  }
+}
+
+// Buttons Message Functions
+function addButtonField() {
+  const container = $('#buttonsContainer');
+  const buttonFields = container.find('.button-field');
+  
+  if (buttonFields.length >= 3) {
+    showError('Maximum of 3 buttons allowed');
+    return;
+  }
+  
+  container.append(`
+    <div class="two fields button-field">
+      <div class="field">
+        <label>Button ID</label>
+        <input type="text" class="button-id" placeholder="unique-id-${buttonFields.length + 1}" maxlength="256">
+        <small>Unique identifier for this button</small>
+      </div>
+      <div class="field">
+        <label>Button Text</label>
+        <input type="text" class="button-text" placeholder="Button Label" maxlength="20">
+        <small>Text displayed on button (max 20 chars)</small>
+      </div>
+    </div>
+  `);
+  
+  updateButtonControls();
+}
+
+function removeButtonField() {
+  const container = $('#buttonsContainer');
+  const buttonFields = container.find('.button-field');
+  
+  if (buttonFields.length > 1) {
+    buttonFields.last().remove();
+  }
+  
+  updateButtonControls();
+}
+
+function updateButtonControls() {
+  const container = $('#buttonsContainer');
+  const buttonFields = container.find('.button-field');
+  const addBtn = $('#addButtonBtn');
+  const removeBtn = $('#removeButtonBtn');
+  
+  if (buttonFields.length >= 3) {
+    addBtn.prop('disabled', true);
+  } else {
+    addBtn.prop('disabled', false);
+  }
+  
+  if (buttonFields.length > 1) {
+    removeBtn.show();
+  } else {
+    removeBtn.hide();
+  }
+}
+
+async function sendButtonsMessage() {
+  try {
+    const phone = $('#buttonssendphone').val().trim();
+    const title = $('#buttonssendtitle').val().trim();
+    
+    if (!phone || !title) {
+      showError('Please fill in all required fields');
+      return;
+    }
+    
+    // Collect buttons
+    const buttons = [];
+    const buttonFields = $('#buttonsContainer .button-field');
+    
+    if (buttonFields.length === 0) {
+      showError('Please add at least one button');
+      return;
+    }
+    
+    buttonFields.each(function() {
+      const buttonId = $(this).find('.button-id').val().trim();
+      const buttonText = $(this).find('.button-text').val().trim();
+      
+      if (buttonId && buttonText) {
+        buttons.push({
+          ButtonId: buttonId,
+          ButtonText: buttonText
+        });
+      }
+    });
+    
+    if (buttons.length === 0) {
+      showError('Please fill in at least one complete button (ID and Text)');
+      return;
+    }
+    
+    if (buttons.length > 3) {
+      showError('Maximum of 3 buttons allowed');
+      return;
+    }
+    
+    const token = getLocalStorageItem('token');
+    const myHeaders = new Headers();
+    myHeaders.append('token', token);
+    myHeaders.append('Content-Type', 'application/json');
+    
+    const payload = {
+      Phone: phone,
+      Title: title,
+      Buttons: buttons
+    };
+    
+    const uuid = generateMessageUUID();
+    payload.Id = uuid;
+    
+    const res = await fetch(baseUrl + "/chat/send/buttons", {
+      method: "POST",
+      headers: myHeaders,
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await res.json();
+    const container = document.getElementById('sendButtonsContainer');
+    
+    if (container) {
+      container.classList.remove('hidden');
+      
+      if (res.ok && data.code === 200 && data.success) {
+        const messageId = data.data?.Id || uuid;
+        container.innerHTML = `<div class="ui success message">Message sent successfully! ID: ${messageId}</div>`;
+        $('#modalSendButtonsMessage').modal('hide');
+        setTimeout(() => {
+          $('#sendButtonsForm')[0].reset();
+          $('#buttonsContainer').html(`
+            <div class="two fields button-field">
+              <div class="field">
+                <label>Button ID</label>
+                <input type="text" class="button-id" placeholder="unique-id-1" maxlength="256">
+                <small>Unique identifier for this button</small>
+              </div>
+              <div class="field">
+                <label>Button Text</label>
+                <input type="text" class="button-text" placeholder="Button Label" maxlength="20">
+                <small>Text displayed on button (max 20 chars)</small>
+              </div>
+            </div>
+          `);
+          updateButtonControls();
+        }, 2000);
+      } else {
+        const errorMsg = data.error || data.message || (data.data && data.data.error) || 'Unknown error';
+        container.innerHTML = `<div class="ui error message">Failed to send message: ${errorMsg}</div>`;
+      }
+    }
+  } catch (error) {
+    console.error('Error sending buttons message:', error);
+    showError('Error sending buttons message: ' + error.message);
+  }
+}
+
+// List Message Functions
+function resetListForm() {
+  $('#listSectionsContainer').html(`
+    <div class="list-section">
+      <div class="field">
+        <label>Section Title</label>
+        <input type="text" class="section-title" placeholder="Section Name" maxlength="24">
+      </div>
+      <div class="list-items-container">
+        <div class="three fields list-item-field">
+          <div class="field">
+            <label>Row ID</label>
+            <input type="text" class="row-id" placeholder="item1" maxlength="200">
+            <small>Unique identifier</small>
+          </div>
+          <div class="field">
+            <label>Title <span class="required">*</span></label>
+            <input type="text" class="row-title" placeholder="Item Title" maxlength="24" required>
+            <small>Item title (max 24 chars)</small>
+          </div>
+          <div class="field">
+            <label>Description</label>
+            <input type="text" class="row-desc" placeholder="Item description" maxlength="72">
+            <small>Optional description (max 72 chars)</small>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="ui small button add-list-item-btn">
+        <i class="plus icon"></i> Add Item to Section
+      </button>
+      <button type="button" class="ui small button remove-list-item-btn" style="display: none;">
+        <i class="minus icon"></i> Remove Last Item
+      </button>
+    </div>
+  `);
+  
+  // Event listeners are already set up via delegation, so no need to reattach
+  updateListItemControls($('#listSectionsContainer .list-section').first());
+}
+
+function addListSection() {
+  const container = $('#listSectionsContainer');
+  const sections = container.find('.list-section');
+  
+  if (sections.length >= 10) {
+    showError('Maximum of 10 sections allowed');
+    return;
+  }
+  
+  const newSection = $(`
+    <div class="list-section">
+      <div class="ui divider"></div>
+      <div class="field">
+        <label>Section Title</label>
+        <input type="text" class="section-title" placeholder="Section Name" maxlength="24">
+      </div>
+      <div class="list-items-container">
+        <div class="three fields list-item-field">
+          <div class="field">
+            <label>Row ID</label>
+            <input type="text" class="row-id" placeholder="item1" maxlength="200">
+            <small>Unique identifier</small>
+          </div>
+          <div class="field">
+            <label>Title <span class="required">*</span></label>
+            <input type="text" class="row-title" placeholder="Item Title" maxlength="24" required>
+            <small>Item title (max 24 chars)</small>
+          </div>
+          <div class="field">
+            <label>Description</label>
+            <input type="text" class="row-desc" placeholder="Item description" maxlength="72">
+            <small>Optional description (max 72 chars)</small>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="ui small button add-list-item-btn">
+        <i class="plus icon"></i> Add Item to Section
+      </button>
+      <button type="button" class="ui small button remove-list-item-btn" style="display: none;">
+        <i class="minus icon"></i> Remove Last Item
+      </button>
+    </div>
+  `);
+  
+  container.append(newSection);
+  updateListItemControls(newSection);
+  updateSectionControls();
+}
+
+function removeListSection() {
+  const container = $('#listSectionsContainer');
+  const sections = container.find('.list-section');
+  
+  if (sections.length > 1) {
+    sections.last().remove();
+  }
+  
+  updateSectionControls();
+}
+
+function attachListItemListeners() {
+  // Event listeners are handled via delegation in DOMContentLoaded
+  // This function is kept for compatibility but listeners are already set up
+}
+
+function addListItem(section) {
+  const container = section.find('.list-items-container');
+  const items = container.find('.list-item-field');
+  
+  if (items.length >= 10) {
+    showError('Maximum of 10 items per section allowed');
+    return;
+  }
+  
+  container.append(`
+    <div class="three fields list-item-field">
+      <div class="field">
+        <label>Row ID</label>
+        <input type="text" class="row-id" placeholder="item${items.length + 1}" maxlength="200">
+        <small>Unique identifier</small>
+      </div>
+      <div class="field">
+        <label>Title <span class="required">*</span></label>
+        <input type="text" class="row-title" placeholder="Item Title" maxlength="24" required>
+        <small>Item title (max 24 chars)</small>
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <input type="text" class="row-desc" placeholder="Item description" maxlength="72">
+        <small>Optional description (max 72 chars)</small>
+      </div>
+    </div>
+  `);
+  
+  updateListItemControls(section);
+}
+
+function removeListItem(section) {
+  const container = section.find('.list-items-container');
+  const items = container.find('.list-item-field');
+  
+  if (items.length > 1) {
+    items.last().remove();
+  }
+  
+  updateListItemControls(section);
+}
+
+function updateListItemControls(section) {
+  const items = section.find('.list-item-field');
+  const addBtn = section.find('.add-list-item-btn');
+  const removeBtn = section.find('.remove-list-item-btn');
+  
+  if (items.length >= 10) {
+    addBtn.prop('disabled', true);
+  } else {
+    addBtn.prop('disabled', false);
+  }
+  
+  if (items.length > 1) {
+    removeBtn.show();
+  } else {
+    removeBtn.hide();
+  }
+}
+
+function updateSectionControls() {
+  const sections = $('#listSectionsContainer .list-section');
+  const addBtn = $('#addSectionBtn');
+  const removeBtn = $('#removeSectionBtn');
+  
+  if (sections.length >= 10) {
+    addBtn.prop('disabled', true);
+  } else {
+    addBtn.prop('disabled', false);
+  }
+  
+  if (sections.length > 1) {
+    removeBtn.show();
+  } else {
+    removeBtn.hide();
+  }
+}
+
+async function sendListMessage() {
+  try {
+    const phone = $('#listsendphone').val().trim();
+    const topText = $('#listsendtitle').val().trim();
+    const desc = $('#listsenddesc').val().trim();
+    const buttonText = $('#listsendbuttontext').val().trim();
+    const footerText = $('#listsendfooter').val().trim();
+    
+    if (!phone || !topText || !desc || !buttonText) {
+      showError('Please fill in all required fields');
+      return;
+    }
+    
+    // Collect sections
+    const sections = [];
+    $('#listSectionsContainer .list-section').each(function() {
+      const sectionTitle = $(this).find('.section-title').val().trim() || 'Menu';
+      const rows = [];
+      
+      $(this).find('.list-item-field').each(function() {
+        const rowId = $(this).find('.row-id').val().trim();
+        const rowTitle = $(this).find('.row-title').val().trim();
+        const rowDesc = $(this).find('.row-desc').val().trim();
+        
+        if (rowTitle) {
+          rows.push({
+            title: rowTitle,
+            desc: rowDesc || '',
+            RowId: rowId || rowTitle
+          });
+        }
+      });
+      
+      if (rows.length > 0) {
+        sections.push({
+          title: sectionTitle,
+          rows: rows
+        });
+      }
+    });
+    
+    if (sections.length === 0) {
+      showError('Please add at least one item to the list');
+      return;
+    }
+    
+    // Check total items
+    let totalItems = 0;
+    sections.forEach(sec => {
+      totalItems += sec.rows.length;
+    });
+    
+    if (totalItems > 10) {
+      showError('Maximum of 10 items total allowed across all sections');
+      return;
+    }
+    
+    const token = getLocalStorageItem('token');
+    const myHeaders = new Headers();
+    myHeaders.append('token', token);
+    myHeaders.append('Content-Type', 'application/json');
+    
+    const payload = {
+      Phone: phone,
+      TopText: topText,
+      Desc: desc,
+      ButtonText: buttonText,
+      Sections: sections
+    };
+    
+    if (footerText) {
+      payload.FooterText = footerText;
+    }
+    
+    const uuid = generateMessageUUID();
+    payload.Id = uuid;
+    
+    const res = await fetch(baseUrl + "/chat/send/list", {
+      method: "POST",
+      headers: myHeaders,
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await res.json();
+    const container = document.getElementById('sendListContainer');
+    
+    if (container) {
+      container.classList.remove('hidden');
+      
+      if (res.ok && data.code === 200 && data.success) {
+        const messageId = data.data?.Id || uuid;
+        container.innerHTML = `<div class="ui success message">List message sent successfully! ID: ${messageId}</div>`;
+        $('#modalSendListMessage').modal('hide');
+        setTimeout(() => {
+          $('#sendListForm')[0].reset();
+          resetListForm();
+        }, 2000);
+      } else {
+        const errorMsg = data.error || data.message || (data.data && data.data.error) || 'Unknown error';
+        container.innerHTML = `<div class="ui error message">Failed to send list message: ${errorMsg}</div>`;
+      }
+    }
+  } catch (error) {
+    console.error('Error sending list message:', error);
+    showError('Error sending list message: ' + error.message);
   }
 }

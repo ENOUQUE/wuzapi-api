@@ -1790,7 +1790,7 @@ func (s *server) SendLocation() http.HandlerFunc {
 	}
 }
 
-// Sends Buttons (not implemented, does not work)
+// Sends Buttons - sends interactive button messages
 func (s *server) SendButtons() http.HandlerFunc {
 
 	type buttonStruct struct {
@@ -1872,11 +1872,9 @@ func (s *server) SendButtons() http.HandlerFunc {
 			Buttons:     buttons,
 		}
 
-		resp, err = clientManager.GetWhatsmeowClient(txtid).SendMessage(context.Background(), recipient, &waE2E.Message{ViewOnceMessage: &waE2E.FutureProofMessage{
-			Message: &waE2E.Message{
-				ButtonsMessage: msg2,
-			},
-		}}, whatsmeow.SendRequestExtra{ID: msgid})
+		resp, err = clientManager.GetWhatsmeowClient(txtid).SendMessage(context.Background(), recipient, &waE2E.Message{
+			ButtonsMessage: msg2,
+		}, whatsmeow.SendRequestExtra{ID: msgid})
 		if err != nil {
 			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("error sending message: %v", err)))
 			return
@@ -2033,7 +2031,7 @@ func (s *server) SendList() http.HandlerFunc {
 		log.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", msgid).Msg("Message list sent")
 		response := map[string]interface{}{
 			"Details":   "Sent",
-			"Timestamp": resp.Timestamp,
+			"Timestamp": resp.Timestamp.Unix(),
 			"Id":        msgid,
 		}
 		responseJson, err := json.Marshal(response)

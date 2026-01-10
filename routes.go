@@ -4,11 +4,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/justinas/alice"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
+	"github.com/rs/zerolog/log"
 )
 
 type Middleware = alice.Constructor
@@ -20,6 +22,44 @@ func (s *server) routes() {
 		panic(err)
 	}
 	exPath := filepath.Dir(ex)
+	
+	// When running with 'go run', exPath might be a temporary directory
+	// Find the correct static directory path
+	staticPath := filepath.Join(exPath, "static")
+	
+	// Check if static directory exists at executable path
+	if _, err := os.Stat(staticPath); os.IsNotExist(err) {
+		// Try current working directory
+		cwd, err := os.Getwd()
+		if err == nil {
+			// Try if we're in wuzapi-api directory
+			if filepath.Base(cwd) == "wuzapi-api" {
+				staticPath = filepath.Join(cwd, "static")
+				exPath = cwd
+				log.Info().Str("staticPath", staticPath).Msg("Found static directory in current working directory (wuzapi-api)")
+			} else {
+				// Try wuzapi-api subdirectory
+				wuzapiApiStatic := filepath.Join(cwd, "wuzapi-api", "static")
+				if _, err := os.Stat(wuzapiApiStatic); err == nil {
+					staticPath = wuzapiApiStatic
+					exPath = filepath.Join(cwd, "wuzapi-api")
+					log.Info().Str("staticPath", staticPath).Msg("Found static directory in wuzapi-api subdirectory")
+				} else {
+					// Try just static in current directory
+					cwdStatic := filepath.Join(cwd, "static")
+					if _, err := os.Stat(cwdStatic); err == nil {
+						staticPath = cwdStatic
+						exPath = cwd
+						log.Info().Str("staticPath", staticPath).Msg("Found static directory in current working directory")
+					} else {
+						log.Warn().Str("exPath", exPath).Str("cwd", cwd).Msg("Static directory not found, using executable path")
+					}
+				}
+			}
+		}
+	} else {
+		log.Info().Str("staticPath", staticPath).Msg("Using static directory from executable path")
+	}
 
 	var routerLog zerolog.Logger
 	logOutput := os.Stdout
@@ -159,5 +199,23 @@ func (s *server) routes() {
 
 	s.router.Handle("/newsletter/list", c.Then(s.ListNewsletter())).Methods("GET")
 
-	s.router.PathPrefix("/").Handler(http.FileServer(http.Dir(exPath + "/static/")))
+	// Serve static files - handle dashboard routes first (more specific)
+	// Handle /dashboard/* routes (for JS, CSS, etc.) - must come before /dashboard
+	s.router.PathPrefix("/dashboard/").Handler(http.StripPrefix("/dashboard/", http.FileServer(http.Dir(filepath.Join(staticPath, "dashboard")))))
+	
+	// Handle /dashboard route (without trailing slash) - serves index.html
+	s.router.HandleFunc("/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		// Redirect to /dashboard/ if no trailing slash, or serve index.html
+		if r.URL.Path == "/dashboard" {
+			dashboardPath := filepath.Join(staticPath, "dashboard", "index.html")
+			if _, err := os.Stat(dashboardPath); os.IsNotExist(err) {
+				http.Error(w, "Dashboard not found", http.StatusNotFound)
+				return
+			}
+			http.ServeFile(w, r, dashboardPath)
+		}
+	})
+	
+	// Serve all other static files from static root (catch-all, must be last)
+	s.router.PathPrefix("/").Handler(http.FileServer(http.Dir(staticPath)))
 }
