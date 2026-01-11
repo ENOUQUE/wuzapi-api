@@ -154,7 +154,9 @@ func (s *server) routes() {
 	s.router.Handle("/chat/send/contact", c.Then(s.SendContact())).Methods("POST")
 	s.router.Handle("/chat/react", c.Then(s.React())).Methods("POST")
 	s.router.Handle("/chat/send/buttons", c.Then(s.SendButtons())).Methods("POST")
+	s.router.Handle("/sendButton", c.Then(s.SendButtons())).Methods("POST") // UzAPI compatibility alias
 	s.router.Handle("/chat/send/list", c.Then(s.SendList())).Methods("POST")
+	s.router.Handle("/sendList", c.Then(s.SendList())).Methods("POST") // UzAPI compatibility alias
 	s.router.Handle("/chat/send/poll", c.Then(s.SendPoll())).Methods("POST")
 	s.router.Handle("/chat/send/edit", c.Then(s.SendEditMessage())).Methods("POST")
 	s.router.Handle("/chat/history", c.Then(s.GetHistory())).Methods("GET")

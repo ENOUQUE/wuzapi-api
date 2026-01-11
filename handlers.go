@@ -1798,6 +1798,7 @@ func (s *server) SendButtons() http.HandlerFunc {
 		PhoneNumber string `json:"phoneNumber"`
 	}
 	type textStruct struct {
+		Session string         `json:"session"` // UzAPI compatibility (ignored, uses token from header)
 		Number  string         `json:"number"`
 		Text    string         `json:"text"`
 		Title   string         `json:"title"`
@@ -1849,13 +1850,19 @@ func (s *server) SendButtons() http.HandlerFunc {
 			buttons = append(buttons, btn)
 		}
 
+		// Combine title and text if title exists (UzAPI format compatibility)
+		contentText := t.Text
+		if t.Title != "" {
+			// Format: Title\n\nText (like UzAPI)
+			contentText = t.Title + "\n\n" + t.Text
+		}
+
 		msg := &waE2E.ButtonsMessage{
-			ContentText: proto.String(t.Text),
+			ContentText: proto.String(contentText),
 			FooterText:  proto.String(t.Footer),
 			Buttons:     buttons,
 			HeaderType:  waE2E.ButtonsMessage_TEXT.Enum(),
 		}
-		// Note: Title is included in ContentText, HeaderText field doesn't exist in ButtonsMessage
 
 		resp, err := client.SendMessage(context.Background(), recipient, &waE2E.Message{
 			ViewOnceMessage: &waE2E.FutureProofMessage{
@@ -1889,23 +1896,32 @@ func (s *server) SendButtons() http.HandlerFunc {
 // SendList
 func (s *server) SendList() http.HandlerFunc {
 	type listItem struct {
-		Title string `json:"title"`
-		Desc  string `json:"desc"`
-		RowId string `json:"RowId"`
+		Id          string `json:"id"`          // UzAPI format
+		Title       string `json:"title"`
+		Desc        string `json:"desc"`
+		Descriptions string `json:"descriptions"` // UzAPI format (alternative to desc)
+		RowId       string `json:"RowId"`
 	}
 	type section struct {
 		Title string     `json:"title"`
 		Rows  []listItem `json:"rows"`
 	}
 	type listRequest struct {
-		Phone      string     `json:"Phone"`
-		ButtonText string     `json:"ButtonText"`
-		Desc       string     `json:"Desc"`
-		TopText    string     `json:"TopText"`
-		Sections   []section  `json:"Sections"`
-		List       []listItem `json:"List"` // compatibility
-		FooterText string     `json:"FooterText"`
-		Id         string     `json:"Id,omitempty"`
+		Session       string     `json:"session"`        // UzAPI compatibility (ignored, uses token from header)
+		Number        string     `json:"number"`         // UzAPI format
+		Phone         string     `json:"Phone"`          // Original format
+		TitleListButton string   `json:"titleListButton"` // UzAPI format
+		ButtonText    string     `json:"ButtonText"`      // Original format
+		Body          string     `json:"body"`            // UzAPI format
+		Desc          string     `json:"Desc"`            // Original format
+		Title         string     `json:"title"`           // UzAPI format
+		TopText       string     `json:"TopText"`         // Original format
+		Footer        string     `json:"footer"`          // UzAPI format
+		FooterText    string     `json:"FooterText"`      // Original format
+		Sections      []section  `json:"sections"`        // UzAPI format (lowercase)
+		SectionsUpper []section  `json:"Sections"`       // Original format
+		List          []listItem `json:"List"`            // compatibility
+		Id            string     `json:"Id,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1922,44 +1938,101 @@ func (s *server) SendList() http.HandlerFunc {
 			return
 		}
 
+		// Normalize fields: UzAPI format -> Original format
+		if req.Number != "" && req.Phone == "" {
+			req.Phone = req.Number
+		}
+		if req.TitleListButton != "" && req.ButtonText == "" {
+			req.ButtonText = req.TitleListButton
+		}
+		if req.Body != "" && req.Desc == "" {
+			req.Desc = req.Body
+		}
+		if req.Title != "" && req.TopText == "" {
+			req.TopText = req.Title
+		}
+		if req.Footer != "" && req.FooterText == "" {
+			req.FooterText = req.Footer
+		}
+		if len(req.Sections) > 0 && len(req.SectionsUpper) == 0 {
+			req.SectionsUpper = req.Sections
+		}
+
 		// Required fields validation - FooterText is optional
 		if req.Phone == "" || req.ButtonText == "" || req.Desc == "" || req.TopText == "" {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing required fields: Phone, ButtonText, Desc, TopText"))
+			s.Respond(w, r, http.StatusBadRequest, errors.New("missing required fields: Phone/number, ButtonText/titleListButton, Desc/body, TopText/title"))
 			return
 		}
 
 		// Priority for Sections, but accepts List for compatibility
 		var sections []*waE2E.ListMessage_Section
-		if len(req.Sections) > 0 {
-			for _, sec := range req.Sections {
+		sectionsToProcess := req.SectionsUpper
+		if len(sectionsToProcess) == 0 {
+			sectionsToProcess = req.Sections
+		}
+		
+		if len(sectionsToProcess) > 0 {
+			for _, sec := range sectionsToProcess {
 				var rows []*waE2E.ListMessage_Row
 				for _, item := range sec.Rows {
+					// Skip rows that are only titles (section headers) - they don't have id/RowId
+					// In UzAPI format, rows with only "title" are section headers
+					if item.Id == "" && item.RowId == "" && item.Desc == "" && item.Descriptions == "" {
+						// This is a section header row, skip it
+						continue
+					}
+					
+					// Get description (UzAPI uses "descriptions", original uses "desc")
+					description := item.Desc
+					if description == "" {
+						description = item.Descriptions
+					}
+					
+					// Get row ID (UzAPI uses "id", original uses "RowId")
 					rowId := item.RowId
+					if rowId == "" {
+						rowId = item.Id
+					}
 					if rowId == "" {
 						rowId = item.Title // fallback
 					}
+					
 					rows = append(rows, &waE2E.ListMessage_Row{
 						RowID:       proto.String(rowId),
 						Title:       proto.String(item.Title),
-						Description: proto.String(item.Desc),
+						Description: proto.String(description),
 					})
 				}
-				sections = append(sections, &waE2E.ListMessage_Section{
-					Title: proto.String(sec.Title),
-					Rows:  rows,
-				})
+				// Only add section if it has rows
+				if len(rows) > 0 {
+					sections = append(sections, &waE2E.ListMessage_Section{
+						Title: proto.String(sec.Title),
+						Rows:  rows,
+					})
+				}
 			}
 		} else if len(req.List) > 0 {
 			var rows []*waE2E.ListMessage_Row
 			for _, item := range req.List {
+				// Get description (UzAPI uses "descriptions", original uses "desc")
+				description := item.Desc
+				if description == "" {
+					description = item.Descriptions
+				}
+				
+				// Get row ID (UzAPI uses "id", original uses "RowId")
 				rowId := item.RowId
+				if rowId == "" {
+					rowId = item.Id
+				}
 				if rowId == "" {
 					rowId = item.Title // fallback
 				}
+				
 				rows = append(rows, &waE2E.ListMessage_Row{
 					RowID:       proto.String(rowId),
 					Title:       proto.String(item.Title),
-					Description: proto.String(item.Desc),
+					Description: proto.String(description),
 				})
 			}
 

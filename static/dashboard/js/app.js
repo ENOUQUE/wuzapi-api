@@ -2526,10 +2526,11 @@ async function sendButtonsMessage() {
   try {
     const phone = $('#buttonssendphone').val().trim();
     const title = $('#buttonssendtitle').val().trim();
+    const text = $('#buttonssendtext').val().trim();
     const footer = $('#buttonssendfooter').val().trim();
     
-    if (!phone || !title) {
-      showError('Please fill in all required fields');
+    if (!phone || !text) {
+      showError('Please fill in phone number and message text');
       return;
     }
     
@@ -2605,9 +2606,14 @@ async function sendButtonsMessage() {
     
     const payload = {
       number: phone,
-      text: title,  // ContentText - mensagem principal
+      text: text,  // ContentText - mensagem principal
       buttons: buttons
     };
+    
+    // Add title if provided (like UzAPI format)
+    if (title) {
+      payload.title = title;
+    }
     
     if (footer) {
       payload.footer = footer;

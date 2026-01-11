@@ -978,8 +978,13 @@
           <input id="buttonssendphone" type="text" placeholder="Type phone number" required>
         </div>
         <div class="field">
-          <label>Title/Message Text <span class="required">*</span></label>
-          <textarea id="buttonssendtitle" placeholder="Message text that will appear above the buttons" rows="3" required></textarea>
+          <label>Title (Optional)</label>
+          <input id="buttonssendtitle" type="text" placeholder="Title that appears at the top" maxlength="60">
+          <small>Title text that appears at the top (max 60 characters, optional)</small>
+        </div>
+        <div class="field">
+          <label>Message Text <span class="required">*</span></label>
+          <textarea id="buttonssendtext" placeholder="Message text that will appear above the buttons" rows="3" required></textarea>
           <small>This is the message that appears above the buttons (max 1024 characters)</small>
         </div>
         <div class="field">
