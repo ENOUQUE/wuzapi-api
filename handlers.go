@@ -1845,12 +1845,20 @@ func (s *server) SendButtons() http.HandlerFunc {
 			return
 		}
 
-		if len(t.Buttons) == 0 {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("at least one button is required"))
+		// Validate buttons before processing - count only buttons with text
+		validButtons := 0
+		for _, b := range t.Buttons {
+			if b.Text != "" {
+				validButtons++
+			}
+		}
+
+		if validButtons == 0 {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("at least one button with text is required"))
 			return
 		}
 
-		if len(t.Buttons) > 5 {
+		if validButtons > 5 {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("maximum of 5 buttons allowed"))
 			return
 		}
@@ -1862,23 +1870,36 @@ func (s *server) SendButtons() http.HandlerFunc {
 		}
 
 		var buttons []*waE2E.ButtonsMessage_Button
-		for _, b := range t.Buttons {
+		for i, b := range t.Buttons {
+			// Ensure button text is not empty
+			if b.Text == "" {
+				continue // Skip buttons without text
+			}
+
 			btn := &waE2E.ButtonsMessage_Button{
 				ButtonText: &waE2E.ButtonsMessage_Button_ButtonText{DisplayText: proto.String(b.Text)},
 			}
 
 			if b.Url != "" {
+				// URL button
 				btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
 					Name: proto.String("cta_url"),
 					ParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"%s","url":"%s","merchant_url":"%s"}`, b.Text, b.Url, b.Url)),
 				}
 			} else if b.PhoneNumber != "" {
+				// Phone number button
 				btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
 					Name: proto.String("cta_call"),
 					ParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"%s","phone_number":"%s"}`, b.Text, b.PhoneNumber)),
 				}
 			} else {
-				btn.ButtonID = proto.String(b.Id)
+				// Response button (must have an ID)
+				buttonID := b.Id
+				if buttonID == "" {
+					// Generate a default ID if not provided
+					buttonID = fmt.Sprintf("btn_%d", i+1)
+				}
+				btn.ButtonID = proto.String(buttonID)
 				btn.Type = waE2E.ButtonsMessage_Button_RESPONSE.Enum()
 			}
 			buttons = append(buttons, btn)
