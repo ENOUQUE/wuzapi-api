@@ -943,6 +943,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#chatPresence', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    // Initialize dropdown if not already initialized
+    if (!$('#chatpresencetype').hasClass('ui dropdown')) {
+      $('#chatpresencetype').dropdown();
+    }
     $('#modalChatPresence').modal('show');
   });
   $('#chatPresenceSubmit').on('click', function() {
@@ -953,6 +957,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#archiveChat', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    // Initialize checkbox if not already initialized
+    if (!$('#archivechatarchive').hasClass('ui checkbox')) {
+      $('#archivechatarchive').checkbox();
+    }
     $('#modalArchiveChat').modal('show');
   });
   $('#archiveChatSubmit').on('click', function() {

@@ -1,5 +1,48 @@
 // Additional message sending functions for Alfa API Dashboard
 
+// Ensure baseUrl is available (from app.js)
+if (typeof baseUrl === 'undefined') {
+  var baseUrl = window.location.origin;
+}
+
+// Helper functions (if not already defined in app.js)
+if (typeof showError === 'undefined') {
+  function showError(message) {
+    alert(message);
+  }
+}
+
+if (typeof generateMessageUUID === 'undefined') {
+  function generateMessageUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    }).toUpperCase();
+  }
+}
+
+if (typeof getLocalStorageItem === 'undefined') {
+  function getLocalStorageItem(key) {
+    try {
+      const item = localStorage.getItem(key);
+      if (!item) return null;
+      try {
+        const parsed = JSON.parse(item);
+        if (parsed && parsed.expiry && parsed.expiry < Date.now()) {
+          localStorage.removeItem(key);
+          return null;
+        }
+        return parsed.value || parsed;
+      } catch (e) {
+        return item;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
 // Send Image Message
 async function sendImageMessage() {
   try {
@@ -586,7 +629,18 @@ async function editMessage() {
 async function setChatPresence() {
   try {
     const phone = $('#chatpresencephone').val().trim();
-    const presenceType = $('#chatpresencetype').val();
+    // Get value from dropdown (Fomantic-UI dropdown)
+    let presenceType = '';
+    try {
+      presenceType = $('#chatpresencetype').dropdown('get value');
+    } catch (e) {
+      // Dropdown not initialized, use regular val()
+      presenceType = $('#chatpresencetype').val();
+    }
+    // Fallback if still empty
+    if (!presenceType) {
+      presenceType = $('#chatpresencetype').val();
+    }
     
     if (!phone || !presenceType) {
       showError('Please fill in all required fields');
