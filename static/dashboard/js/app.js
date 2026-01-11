@@ -768,6 +768,165 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   init();
+
+  // Send Image Message
+  $(document).on('click', '#sendImageMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendImage').modal('show');
+  });
+  $('#sendImageSubmit').on('click', function() {
+    sendImageMessage();
+  });
+
+  // Send Audio Message
+  $(document).on('click', '#sendAudioMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendAudio').modal('show');
+  });
+  $('#sendAudioSubmit').on('click', function() {
+    sendAudioMessage();
+  });
+
+  // Send Video Message
+  $(document).on('click', '#sendVideoMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendVideo').modal('show');
+  });
+  $('#sendVideoSubmit').on('click', function() {
+    sendVideoMessage();
+  });
+
+  // Send Document Message
+  $(document).on('click', '#sendDocumentMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendDocument').modal('show');
+  });
+  $('#sendDocumentSubmit').on('click', function() {
+    sendDocumentMessage();
+  });
+
+  // Send Sticker Message
+  $(document).on('click', '#sendStickerMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendSticker').modal('show');
+  });
+  $('#sendStickerSubmit').on('click', function() {
+    sendStickerMessage();
+  });
+
+  // Send Location Message
+  $(document).on('click', '#sendLocationMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendLocation').modal('show');
+  });
+  $('#sendLocationSubmit').on('click', function() {
+    sendLocationMessage();
+  });
+
+  // Send Contact Message
+  $(document).on('click', '#sendContactMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendContact').modal('show');
+  });
+  $('#sendContactSubmit').on('click', function() {
+    sendContactMessage();
+  });
+
+  // Send Poll Message
+  $(document).on('click', '#sendPollMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendPoll').modal('show');
+  });
+  $('#sendPollSubmit').on('click', function() {
+    sendPollMessage();
+  });
+  $('#addPollOption').on('click', function() {
+    const container = $('#pollOptionsContainer');
+    const options = container.find('.poll-option');
+    if (options.length >= 12) {
+      showError('Maximum of 12 options allowed');
+      return;
+    }
+    container.append('<div class="field"><input type="text" class="poll-option" placeholder="Option ' + (options.length + 1) + '" required></div>');
+  });
+
+  // React to Message
+  $(document).on('click', '#reactMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalReactMessage').modal('show');
+  });
+  $('#reactMessageSubmit').on('click', function() {
+    reactToMessage();
+  });
+
+  // Mark as Read
+  $(document).on('click', '#markReadMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalMarkRead').modal('show');
+  });
+  $('#markReadSubmit').on('click', function() {
+    markMessageAsRead();
+  });
+
+  // Edit Message
+  $(document).on('click', '#editMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalEditMessage').modal('show');
+  });
+  $('#editMessageSubmit').on('click', function() {
+    editMessage();
+  });
+
+  // Chat Presence
+  $(document).on('click', '#chatPresence', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalChatPresence').modal('show');
+  });
+  $('#chatPresenceSubmit').on('click', function() {
+    setChatPresence();
+  });
+
+  // Archive Chat
+  $(document).on('click', '#archiveChat', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalArchiveChat').modal('show');
+  });
+  $('#archiveChatSubmit').on('click', function() {
+    archiveChat();
+  });
+
+  // Set Status
+  $(document).on('click', '#setStatus', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSetStatus').modal('show');
+  });
+  $('#setStatusSubmit').on('click', function() {
+    setStatusMessage();
+  });
+
+  // Reject Call
+  $(document).on('click', '#rejectCall', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalRejectCall').modal('show');
+  });
+  $('#rejectCallSubmit').on('click', function() {
+    rejectCall();
+  });
 });
 
 async function addInstance(data) {
@@ -2396,7 +2555,6 @@ async function sendButtonsMessage() {
     const payload = {
       number: phone,
       text: title,  // ContentText - mensagem principal
-      title: title,  // HeaderText - título (usando o mesmo valor)
       buttons: buttons
     };
     
@@ -2435,7 +2593,7 @@ async function sendButtonsMessage() {
       }
       
       if (res.ok && data.code === 200 && data.success) {
-        const messageId = data.data?.Id || uuid;
+        const messageId = data.data?.Id || data.data?.id || uuid;
         container.innerHTML = `<div class="ui success message">Message sent successfully! ID: ${messageId}</div>`;
         $('#modalSendButtonsMessage').modal('hide');
         setTimeout(() => {
@@ -2486,7 +2644,7 @@ async function sendButtonsMessage() {
         }, 2000);
       } else {
         const errorMsg = data.error || data.message || (data.data && typeof data.data === 'string' ? data.data : (data.data && data.data.error)) || `HTTP ${res.status}: ${res.statusText}`;
-        container.innerHTML = `<div class="ui error message">Failed to send message: ${errorMsg}</div>`;
+        container.innerHTML = `<div class="ui error message">Failed to send buttons message: ${errorMsg}</div>`;
       }
     }
   } catch (error) {
@@ -2784,7 +2942,7 @@ async function sendListMessage() {
       }
       
       if (res.ok && data.code === 200 && data.success) {
-        const messageId = data.data?.Id || uuid;
+        const messageId = data.data?.Id || data.data?.id || uuid;
         container.innerHTML = `<div class="ui success message">List message sent successfully! ID: ${messageId}</div>`;
         $('#modalSendListMessage').modal('hide');
         setTimeout(() => {

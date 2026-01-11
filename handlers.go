@@ -1870,11 +1870,18 @@ func (s *server) SendButtons() http.HandlerFunc {
 			return
 		}
 
-		s.Respond(w, r, http.StatusOK, map[string]interface{}{
+		log.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", resp.ID.String()).Msg("Message buttons sent")
+		response := map[string]interface{}{
 			"Details":   "Sent",
 			"Timestamp": resp.Timestamp.Unix(),
-			"Id":        resp.ID,
-		})
+			"Id":        resp.ID.String(),
+		}
+		responseJson, err := json.Marshal(response)
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, err)
+		} else {
+			s.Respond(w, r, http.StatusOK, string(responseJson))
+		}
 	}
 }
 // CERTIFIQUE-SE QUE NÃO HÁ NADA ESCRITO ABAIXO DESTA LINHA

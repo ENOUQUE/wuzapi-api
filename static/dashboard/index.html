@@ -202,6 +202,84 @@
           <div class="description"> Deletes your sent message.</div>
         </div>
       </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendImageMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Image</div>
+          <div class="description"> Sends an image message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendAudioMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Audio</div>
+          <div class="description"> Sends an audio message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendVideoMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Video</div>
+          <div class="description"> Sends a video message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendDocumentMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Document</div>
+          <div class="description"> Sends a document message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendStickerMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Sticker</div>
+          <div class="description"> Sends a sticker message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendLocationMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Location</div>
+          <div class="description"> Sends a location message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendContactMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Contact</div>
+          <div class="description"> Sends a contact message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="sendPollMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Send Poll</div>
+          <div class="description"> Sends a poll message to a group.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="reactMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">React to Message</div>
+          <div class="description"> Reacts to a message with an emoji.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="markReadMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Mark as Read</div>
+          <div class="description"> Marks a message as read.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="editMessage">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Edit Message</div>
+          <div class="description"> Edits a previously sent message.</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="chatPresence">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Chat Presence</div>
+          <div class="description"> Sets presence in chat (typing/recording).</div>
+        </div>
+      </div>
+      <div class="blue card hidden widget" style="cursor: pointer;" id="archiveChat">
+        <div class="content"><a class="ui blue right ribbon label">Chat</a>
+          <div class="header">Archive Chat</div>
+          <div class="description"> Archives or unarchives a chat.</div>
+        </div>
+      </div>
     </div>
 
     <div class="ui horizontal divider widget"> Groups </div>
@@ -222,6 +300,26 @@
         <div class="content"><a class="ui green right ribbon label">Groups</a>
           <div class="header">Join Group</div>
           <div class="description">Join a group using invite link.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ui horizontal divider widget"> Status </div>
+    <div class="ui three column stackable grid cards">
+      <div class="orange card hidden widget" style="cursor: pointer;" id="setStatus">
+        <div class="content"><a class="ui orange right ribbon label">Status</a>
+          <div class="header">Set Status Message</div>
+          <div class="description"> Set your WhatsApp status message.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ui horizontal divider widget"> Call </div>
+    <div class="ui three column stackable grid cards">
+      <div class="purple card hidden widget" style="cursor: pointer;" id="rejectCall">
+        <div class="content"><a class="ui purple right ribbon label">Call</a>
+          <div class="header">Reject Call</div>
+          <div class="description"> Reject an incoming call.</div>
         </div>
       </div>
     </div>
@@ -1032,6 +1130,396 @@
     </div>
   </div>
 
+  <!-- Send Image Modal -->
+  <div class="ui modal" id="modalSendImage"><i class="close icon"></i>
+    <div class="header"> Send Image Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendImageContainer"></div>
+      <div class="ui form" id="sendImageForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="imagesendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Image URL or Base64 <span class="required">*</span></label>
+          <textarea id="imagesendurl" placeholder="Image URL or base64 data" rows="3" required></textarea>
+        </div>
+        <div class="field">
+          <label>Caption (Optional)</label>
+          <textarea id="imagesendcaption" placeholder="Image caption" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendImageSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Send Audio Modal -->
+  <div class="ui modal" id="modalSendAudio"><i class="close icon"></i>
+    <div class="header"> Send Audio Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendAudioContainer"></div>
+      <div class="ui form" id="sendAudioForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="audiosendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Audio URL or Base64 <span class="required">*</span></label>
+          <textarea id="audiosendurl" placeholder="Audio URL or base64 data" rows="3" required></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendAudioSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Send Video Modal -->
+  <div class="ui modal" id="modalSendVideo"><i class="close icon"></i>
+    <div class="header"> Send Video Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendVideoContainer"></div>
+      <div class="ui form" id="sendVideoForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="videosendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Video URL or Base64 <span class="required">*</span></label>
+          <textarea id="videosendurl" placeholder="Video URL or base64 data" rows="3" required></textarea>
+        </div>
+        <div class="field">
+          <label>Caption (Optional)</label>
+          <textarea id="videosendcaption" placeholder="Video caption" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendVideoSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Send Document Modal -->
+  <div class="ui modal" id="modalSendDocument"><i class="close icon"></i>
+    <div class="header"> Send Document Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendDocumentContainer"></div>
+      <div class="ui form" id="sendDocumentForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="documentsendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Document URL or Base64 <span class="required">*</span></label>
+          <textarea id="documentsendurl" placeholder="Document URL or base64 data" rows="3" required></textarea>
+        </div>
+        <div class="field">
+          <label>File Name <span class="required">*</span></label>
+          <input id="documentsendfilename" type="text" placeholder="document.pdf" required>
+        </div>
+        <div class="field">
+          <label>Caption (Optional)</label>
+          <textarea id="documentsendcaption" placeholder="Document caption" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendDocumentSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Send Sticker Modal -->
+  <div class="ui modal" id="modalSendSticker"><i class="close icon"></i>
+    <div class="header"> Send Sticker Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendStickerContainer"></div>
+      <div class="ui form" id="sendStickerForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="stickersendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Sticker URL or Base64 <span class="required">*</span></label>
+          <textarea id="stickersendurl" placeholder="Sticker URL or base64 data (must be WebP format)" rows="3" required></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendStickerSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Send Location Modal -->
+  <div class="ui modal" id="modalSendLocation"><i class="close icon"></i>
+    <div class="header"> Send Location Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendLocationContainer"></div>
+      <div class="ui form" id="sendLocationForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="locationsendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="two fields">
+          <div class="field">
+            <label>Latitude <span class="required">*</span></label>
+            <input id="locationsendlat" type="number" step="any" placeholder="-23.5505" required>
+          </div>
+          <div class="field">
+            <label>Longitude <span class="required">*</span></label>
+            <input id="locationsendlng" type="number" step="any" placeholder="-46.6333" required>
+          </div>
+        </div>
+        <div class="field">
+          <label>Name (Optional)</label>
+          <input id="locationsendname" type="text" placeholder="Location name">
+        </div>
+        <div class="field">
+          <label>Address (Optional)</label>
+          <input id="locationsendaddress" type="text" placeholder="Full address">
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendLocationSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Send Contact Modal -->
+  <div class="ui modal" id="modalSendContact"><i class="close icon"></i>
+    <div class="header"> Send Contact Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendContactContainer"></div>
+      <div class="ui form" id="sendContactForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="contactsendphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Contact Phone <span class="required">*</span></label>
+          <input id="contactsendcontactphone" type="text" placeholder="5516999999999" required>
+        </div>
+        <div class="field">
+          <label>Contact Name <span class="required">*</span></label>
+          <input id="contactsendname" type="text" placeholder="Contact name" required>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendContactSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Send Poll Modal -->
+  <div class="ui modal" id="modalSendPoll"><i class="close icon"></i>
+    <div class="header"> Send Poll Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="sendPollContainer"></div>
+      <div class="ui form" id="sendPollForm">
+        <div class="field">
+          <label>Group JID <span class="required">*</span></label>
+          <input id="pollsendgroup" type="text" placeholder="120363123456789012@g.us" required>
+          <small>Polls can only be sent to groups</small>
+        </div>
+        <div class="field">
+          <label>Poll Question <span class="required">*</span></label>
+          <input id="pollsendsubject" type="text" placeholder="What is your favorite color?" required>
+        </div>
+        <div class="field">
+          <label>Poll Options <span class="required">*</span></label>
+          <div id="pollOptionsContainer">
+            <div class="two fields">
+              <div class="field">
+                <input type="text" class="poll-option" placeholder="Option 1" required>
+              </div>
+              <div class="field">
+                <input type="text" class="poll-option" placeholder="Option 2" required>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="ui small button" id="addPollOption">Add Option</button>
+          <small>Minimum 2 options, maximum 12 options</small>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="sendPollSubmit">Send<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- React to Message Modal -->
+  <div class="ui modal" id="modalReactMessage"><i class="close icon"></i>
+    <div class="header"> React to Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="reactMessageContainer"></div>
+      <div class="ui form" id="reactMessageForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="reactphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Message ID <span class="required">*</span></label>
+          <input id="reactmessageid" type="text" placeholder="Message ID" required>
+        </div>
+        <div class="field">
+          <label>Emoji <span class="required">*</span></label>
+          <input id="reactemoji" type="text" placeholder="👍" maxlength="2" required>
+          <small>Single emoji (e.g., 👍, ❤️, 😂)</small>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="reactMessageSubmit">React<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Mark as Read Modal -->
+  <div class="ui modal" id="modalMarkRead"><i class="close icon"></i>
+    <div class="header"> Mark Message as Read </div>
+    <div class="content">
+      <div class="ui message info hidden" id="markReadContainer"></div>
+      <div class="ui form" id="markReadForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="markreadphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Message ID <span class="required">*</span></label>
+          <input id="markreadmessageid" type="text" placeholder="Message ID" required>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="markReadSubmit">Mark as Read<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Edit Message Modal -->
+  <div class="ui modal" id="modalEditMessage"><i class="close icon"></i>
+    <div class="header"> Edit Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="editMessageContainer"></div>
+      <div class="ui form" id="editMessageForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="editphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Message ID <span class="required">*</span></label>
+          <input id="editmessageid" type="text" placeholder="Message ID" required>
+        </div>
+        <div class="field">
+          <label>New Text <span class="required">*</span></label>
+          <textarea id="editnewtext" placeholder="New message text" rows="3" required></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="editMessageSubmit">Edit<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Chat Presence Modal -->
+  <div class="ui modal" id="modalChatPresence"><i class="close icon"></i>
+    <div class="header"> Set Chat Presence </div>
+    <div class="content">
+      <div class="ui message info hidden" id="chatPresenceContainer"></div>
+      <div class="ui form" id="chatPresenceForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="chatpresencephone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <label>Presence Type <span class="required">*</span></label>
+          <select id="chatpresencetype" class="ui dropdown" required>
+            <option value="">Select presence type</option>
+            <option value="composing">Typing (Composing)</option>
+            <option value="recording">Recording Audio</option>
+            <option value="paused">Paused</option>
+            <option value="available">Available</option>
+            <option value="unavailable">Unavailable</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="chatPresenceSubmit">Set<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Archive Chat Modal -->
+  <div class="ui modal" id="modalArchiveChat"><i class="close icon"></i>
+    <div class="header"> Archive/Unarchive Chat </div>
+    <div class="content">
+      <div class="ui message info hidden" id="archiveChatContainer"></div>
+      <div class="ui form" id="archiveChatForm">
+        <div class="field">
+          <label>Phone <span class="required">*</span></label>
+          <input id="archivechatphone" type="text" placeholder="Type phone number" required>
+        </div>
+        <div class="field">
+          <div class="ui toggle checkbox">
+            <input type="checkbox" id="archivechatarchive">
+            <label>Archive (uncheck to unarchive)</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="archiveChatSubmit">Archive<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Set Status Modal -->
+  <div class="ui modal" id="modalSetStatus"><i class="close icon"></i>
+    <div class="header"> Set Status Message </div>
+    <div class="content">
+      <div class="ui message info hidden" id="setStatusContainer"></div>
+      <div class="ui form" id="setStatusForm">
+        <div class="field">
+          <label>Status Text <span class="required">*</span></label>
+          <textarea id="setstatustext" placeholder="Your status message" rows="3" required></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="setStatusSubmit">Set Status<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
+  <!-- Reject Call Modal -->
+  <div class="ui modal" id="modalRejectCall"><i class="close icon"></i>
+    <div class="header"> Reject Call </div>
+    <div class="content">
+      <div class="ui message info hidden" id="rejectCallContainer"></div>
+      <div class="ui form" id="rejectCallForm">
+        <div class="field">
+          <label>Call ID <span class="required">*</span></label>
+          <input id="rejectcallid" type="text" placeholder="Call ID" required>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button secondary">Close</div>
+      <div class="ui positive right labeled icon button" id="rejectCallSubmit">Reject<i class="checkmark icon"></i></div>
+    </div>
+  </div>
+
   <!-- Groups Modals -->
 
   <!-- Group Details Modal -->
@@ -1474,5 +1962,6 @@
   <script src="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.4/dist/semantic.min.js"></script>
   <script src="/dashboard/js/app.js"></script>
   <script src="/dashboard/js/groups.js"></script>
+  <script src="/dashboard/js/messages.js"></script>
 </body>
 </html>
