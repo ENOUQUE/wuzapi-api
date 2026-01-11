@@ -1835,12 +1835,12 @@ func (s *server) SendButtons() http.HandlerFunc {
 			if b.Url != "" {
 				btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
 					Name: proto.String("cta_url"),
-					ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","url":"%s","merchant_url":"%s"}`, b.Text, b.Url, b.Url)),
+					ParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"%s","url":"%s","merchant_url":"%s"}`, b.Text, b.Url, b.Url)),
 				}
 			} else if b.PhoneNumber != "" {
 				btn.NativeFlowInfo = &waE2E.ButtonsMessage_Button_NativeFlowInfo{
 					Name: proto.String("cta_call"),
-					ParamsJson: proto.String(fmt.Sprintf(`{"display_text":"%s","phone_number":"%s"}`, b.Text, b.PhoneNumber)),
+					ParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"%s","phone_number":"%s"}`, b.Text, b.PhoneNumber)),
 				}
 			} else {
 				btn.ButtonID = proto.String(b.Id)
@@ -1851,11 +1851,11 @@ func (s *server) SendButtons() http.HandlerFunc {
 
 		msg := &waE2E.ButtonsMessage{
 			ContentText: proto.String(t.Text),
-			HeaderText:  proto.String(t.Title),
 			FooterText:  proto.String(t.Footer),
 			Buttons:     buttons,
 			HeaderType:  waE2E.ButtonsMessage_TEXT.Enum(),
 		}
+		// Note: Title is included in ContentText, HeaderText field doesn't exist in ButtonsMessage
 
 		resp, err := client.SendMessage(context.Background(), recipient, &waE2E.Message{
 			ViewOnceMessage: &waE2E.FutureProofMessage{
@@ -2581,9 +2581,8 @@ func (s *server) SendTemplate() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		txtid := r.Context().Value("userinfo").(Values).Get("Id")
-		userid, _ := strconv.Atoi(txtid)
 
-		if clientManager.GetWhatsmeowClient(userid) == nil {
+		if clientManager.GetWhatsmeowClient(txtid) == nil {
 			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
 			return
 		}
@@ -2626,93 +2625,9 @@ func (s *server) SendTemplate() http.HandlerFunc {
 			return
 		}
 
-		if t.Id == "" {
-			msgid = clientManager.GetWhatsmeowClient(txtid).GenerateMessageID()
-		} else {
-			msgid = t.Id
-		}
-
-		var buttons []*waE2E.HydratedTemplateButton
-
-		id := 1
-		for _, item := range t.Buttons {
-			switch item.Type {
-			case "quickreply":
-				var idtext string
-				text := item.DisplayText
-				if item.Id == "" {
-					idtext = strconv.Itoa(id)
-				} else {
-					idtext = item.Id
-				}
-				buttons = append(buttons, &waE2E.HydratedTemplateButton{
-					HydratedButton: &waE2E.HydratedTemplateButton_QuickReplyButton{
-						QuickReplyButton: &waE2E.HydratedQuickReplyButton{
-							DisplayText: &text,
-							Id:          proto.String(idtext),
-						},
-					},
-				})
-			case "url":
-				text := item.DisplayText
-				url := item.Url
-				buttons = append(buttons, &waE2E.HydratedTemplateButton{
-					HydratedButton: &waE2E.HydratedTemplateButton_UrlButton{
-						UrlButton: &waE2E.HydratedURLButton{
-							DisplayText: &text,
-							Url:         &url,
-						},
-					},
-				})
-			case "call":
-				text := item.DisplayText
-				phonenumber := item.PhoneNumber
-				buttons = append(buttons, &waE2E.HydratedTemplateButton{
-					HydratedButton: &waE2E.HydratedTemplateButton_CallButton{
-						CallButton: &waE2E.HydratedCallButton{
-							DisplayText: &text,
-							PhoneNumber: &phonenumber,
-						},
-					},
-				})
-			default:
-				text := item.DisplayText
-				buttons = append(buttons, &waE2E.HydratedTemplateButton{
-					HydratedButton: &waE2E.HydratedTemplateButton_QuickReplyButton{
-						QuickReplyButton: &waE2E.HydratedQuickReplyButton{
-							DisplayText: &text,
-							Id:          proto.String(string(id)),
-						},
-					},
-				})
-			}
-			id++
-		}
-
-		msg := &waE2E.Message{TemplateMessage: &waE2E.TemplateMessage{
-			HydratedTemplate: &waE2E.HydratedFourRowTemplate{
-				HydratedContentText: proto.String(t.Content),
-				HydratedFooterText:  proto.String(t.Footer),
-				HydratedButtons:     buttons,
-				TemplateId:          proto.String("1"),
-			},
-		},
-		}
-
-		resp, err = clientManager.GetWhatsmeowClient(userid).SendMessage(context.Background(),recipient, msg, whatsmeow.SendRequestExtra{ID: msgid})
-		if err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("Error sending message: %v", err)))
-			return
-		}
-
-		log.Info().Str("timestamp", fmt.Sprintf("%d", resp.Timestamp.Unix())).Str("id", msgid).Msg("Message sent")
-		response := map[string]interface{}{"Details": "Sent", "Timestamp": resp.Timestamp.Unix(), "Id": msgid}
-		responseJson, err := json.Marshal(response)
-		if err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, err)
-		} else {
-			s.Respond(w, r, http.StatusOK, string(responseJson))
-		}
+		// NOTE: Template messages using HydratedTemplate types are no longer supported
+		// due to API changes in whatsmeow library. This endpoint returns NotImplemented.
+		s.Respond(w, r, http.StatusNotImplemented, errors.New("Template messages are not currently supported due to API changes in whatsmeow library"))
 		return
 	}
 }
