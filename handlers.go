@@ -1799,8 +1799,10 @@ func (s *server) SendButtons() http.HandlerFunc {
 	}
 	type textStruct struct {
 		Session string         `json:"session"` // UzAPI compatibility (ignored, uses token from header)
-		Number  string         `json:"number"`
+		Number  string         `json:"number"`   // UzAPI format
+		Phone   string         `json:"Phone"`    // Original format
 		Text    string         `json:"text"`
+		Body    string         `json:"body"`     // Alternative format
 		Title   string         `json:"title"`
 		Footer  string         `json:"footer"`
 		Buttons []buttonStruct `json:"buttons"`
@@ -1821,7 +1823,39 @@ func (s *server) SendButtons() http.HandlerFunc {
 			return
 		}
 
-		recipient, ok := parseJID(t.Number)
+		// Normalize fields: support both formats
+		phoneNumber := t.Number
+		if phoneNumber == "" {
+			phoneNumber = t.Phone
+		}
+		
+		messageText := t.Text
+		if messageText == "" {
+			messageText = t.Body
+		}
+
+		// Validate required fields
+		if phoneNumber == "" {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("missing required field: number/Phone"))
+			return
+		}
+
+		if messageText == "" {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("missing required field: text/body"))
+			return
+		}
+
+		if len(t.Buttons) == 0 {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("at least one button is required"))
+			return
+		}
+
+		if len(t.Buttons) > 5 {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("maximum of 5 buttons allowed"))
+			return
+		}
+
+		recipient, ok := parseJID(phoneNumber)
 		if !ok {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
 			return
@@ -1851,10 +1885,10 @@ func (s *server) SendButtons() http.HandlerFunc {
 		}
 
 		// Combine title and text if title exists (UzAPI format compatibility)
-		contentText := t.Text
+		contentText := messageText
 		if t.Title != "" {
 			// Format: Title\n\nText (like UzAPI)
-			contentText = t.Title + "\n\n" + t.Text
+			contentText = t.Title + "\n\n" + messageText
 		}
 
 		msg := &waE2E.ButtonsMessage{
@@ -1864,12 +1898,10 @@ func (s *server) SendButtons() http.HandlerFunc {
 			HeaderType:  waE2E.ButtonsMessage_TEXT.Enum(),
 		}
 
+		// Send buttons message directly without ViewOnceMessage wrapper
+		// ViewOnceMessage can cause issues with button responses
 		resp, err := client.SendMessage(context.Background(), recipient, &waE2E.Message{
-			ViewOnceMessage: &waE2E.FutureProofMessage{
-				Message: &waE2E.Message{
-					ButtonsMessage: msg,
-				},
-			},
+			ButtonsMessage: msg,
 		}, whatsmeow.SendRequestExtra{})
 
 		if err != nil {
