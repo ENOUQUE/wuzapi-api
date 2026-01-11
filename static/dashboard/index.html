@@ -940,15 +940,15 @@
   <div class="ui modal" id="modalSendTextMessage"><i class="close icon"></i>
     <div class="header"> Send Text Message </div>
     <div class="content">
-      <div class="ui message info hidden" id="sendMessageContainer"></div>
-      <div class="ui form">
+      <div class="ui message info hidden" id="sendTextContainer"></div>
+      <div class="ui form" id="sendTextForm">
         <div class="field"><label>Phone</label><input id="messagesendphone" type="text" placeholder="Type phone number"></div>
         <div class="field"><label>Message</label><textarea id="messagesendtext"></textarea></div>
       </div>
     </div>
     <div class="actions">
       <div class="ui cancel button secondary">Close</div>
-      <div class="ui positive right labeled icon button">Send<i class="checkmark icon"></i></div>
+      <div class="ui positive right labeled icon button" id="sendTextSubmit">Send<i class="checkmark icon"></i></div>
     </div>
   </div>
 
@@ -956,14 +956,14 @@
     <div class="header"> Delete Message </div>
     <div class="content">
       <div class="ui message info hidden" id="deleteMessageContainer"></div>
-      <div class="ui form">
+      <div class="ui form" id="deleteMessageForm">
         <div class="field"><label>Phone</label><input id="messagedeletephone" type="text" placeholder="Type phone number"></div>
         <div class="field"><label>Message ID</label><input id="messagedeleteid" type="text" placeholder="Type the message id"></div>
       </div>
     </div>
     <div class="actions">
       <div class="ui cancel button secondary">Close</div>
-      <div class="ui positive right labeled icon button">Delete<i class="trash icon"></i></div>
+      <div class="ui positive right labeled icon button" id="deleteMessageSubmit">Delete<i class="trash icon"></i></div>
     </div>
   </div>
 

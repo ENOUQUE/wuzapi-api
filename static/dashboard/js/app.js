@@ -348,6 +348,57 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Send Text Message
+  $(document).on('click', '#sendTextMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalSendTextMessage').modal('show');
+  });
+  $('#sendTextSubmit').on('click', function() {
+    sendTextMessage().then(data => {
+      const container = document.getElementById('sendTextContainer');
+      if (container) {
+        container.classList.remove('hidden');
+        if (data.code === 200 && data.success) {
+          const messageId = data.data?.Id || data.data?.id || 'N/A';
+          container.innerHTML = `<div class="ui success message">Message sent successfully! ID: ${messageId}</div>`;
+          $('#modalSendTextMessage').modal('hide');
+          setTimeout(() => $('#sendTextForm')[0].reset(), 2000);
+        } else {
+          const errorMsg = data.error || data.message || 'Unknown error';
+          container.innerHTML = `<div class="ui error message">Failed to send message: ${errorMsg}</div>`;
+        }
+      }
+    }).catch(error => {
+      showError('Error sending message: ' + error.message);
+    });
+  });
+
+  // Delete Message
+  $(document).on('click', '#deleteMessage', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    $('#modalDeleteMessage').modal('show');
+  });
+  $('#deleteMessageSubmit').on('click', function() {
+    deleteMessage().then(data => {
+      const container = document.getElementById('deleteMessageContainer');
+      if (container) {
+        container.classList.remove('hidden');
+        if (data.code === 200 && data.success) {
+          container.innerHTML = `<div class="ui success message">Message deleted successfully!</div>`;
+          $('#modalDeleteMessage').modal('hide');
+          setTimeout(() => $('#deleteMessageForm')[0].reset(), 2000);
+        } else {
+          const errorMsg = data.error || data.message || 'Unknown error';
+          container.innerHTML = `<div class="ui error message">Failed to delete message: ${errorMsg}</div>`;
+        }
+      }
+    }).catch(error => {
+      showError('Error deleting message: ' + error.message);
+    });
+  });
+
   // Send Buttons Message - using event delegation to handle dynamically shown cards
   $(document).on('click', '#sendButtonsMessage', function(e) {
     e.preventDefault();
