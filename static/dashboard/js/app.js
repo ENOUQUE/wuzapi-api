@@ -2395,7 +2395,8 @@ async function sendButtonsMessage() {
     
     const payload = {
       number: phone,
-      text: title,
+      text: title,  // ContentText - mensagem principal
+      title: title,  // HeaderText - título (usando o mesmo valor)
       buttons: buttons
     };
     
@@ -2705,8 +2706,8 @@ async function sendListMessage() {
         if (rowTitle) {
           rows.push({
             title: rowTitle,
-            descriptions: rowDesc || '',
-            id: rowId || rowTitle
+            desc: rowDesc || '',
+            RowId: rowId || rowTitle
           });
         }
       });
@@ -2741,15 +2742,15 @@ async function sendListMessage() {
     myHeaders.append('Content-Type', 'application/json');
     
     const payload = {
-      number: phone,
-      title: topText,
-      body: desc,
-      titleListButton: buttonText,
-      sections: sections
+      Phone: phone,
+      TopText: topText,
+      Desc: desc,
+      ButtonText: buttonText,
+      Sections: sections
     };
     
     if (footerText) {
-      payload.footer = footerText;
+      payload.FooterText = footerText;
     }
     
     const uuid = generateMessageUUID();
