@@ -316,30 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
  
-  const deleteMessageCard = document.getElementById('deleteMessage');
-  if (deleteMessageCard) {
-    deleteMessageCard.addEventListener('click', function() {
-      const container = document.getElementById('deleteMessageContainer');
-      if (container) {
-        container.innerHTML='';
-        container.classList.add('hidden');
-      }
-      $('#modalDeleteMessage').modal({onApprove: function() {
-        deleteMessage().then((result)=>{
-          console.log(result);
-          if (container) {
-            container.classList.remove('hidden');
-            if(result.success===true) {
-               container.innerHTML=`Message deleted successfully.`
-            } else {
-               container.innerHTML=`Problem deleting message: ${result.error}`
-            }
-          }
-        });
-        return false;
-      }}).modal('show');
-    });
-  }
+  // Delete Message handler is now using jQuery event delegation (see line 378)
   
   const userContactsCard = document.getElementById('userContacts');
   if (userContactsCard) {
@@ -378,6 +355,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#deleteMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Delete Message card clicked');
+    if (!$('#modalDeleteMessage').hasClass('ui modal')) {
+      $('#modalDeleteMessage').modal();
+    }
     $('#modalDeleteMessage').modal('show');
   });
   $('#deleteMessageSubmit').on('click', function() {
@@ -824,6 +805,11 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendImageMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Image Message card clicked');
+    // Initialize modal if not already initialized
+    if (!$('#modalSendImage').hasClass('ui modal')) {
+      $('#modalSendImage').modal();
+    }
     $('#modalSendImage').modal('show');
   });
   $('#sendImageSubmit').on('click', function() {
@@ -834,6 +820,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendAudioMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Audio Message card clicked');
+    if (!$('#modalSendAudio').hasClass('ui modal')) {
+      $('#modalSendAudio').modal();
+    }
     $('#modalSendAudio').modal('show');
   });
   $('#sendAudioSubmit').on('click', function() {
@@ -844,6 +834,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendVideoMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Video Message card clicked');
+    if (!$('#modalSendVideo').hasClass('ui modal')) {
+      $('#modalSendVideo').modal();
+    }
     $('#modalSendVideo').modal('show');
   });
   $('#sendVideoSubmit').on('click', function() {
@@ -854,6 +848,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendDocumentMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Document Message card clicked');
+    if (!$('#modalSendDocument').hasClass('ui modal')) {
+      $('#modalSendDocument').modal();
+    }
     $('#modalSendDocument').modal('show');
   });
   $('#sendDocumentSubmit').on('click', function() {
@@ -864,6 +862,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendStickerMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Sticker Message card clicked');
+    if (!$('#modalSendSticker').hasClass('ui modal')) {
+      $('#modalSendSticker').modal();
+    }
     $('#modalSendSticker').modal('show');
   });
   $('#sendStickerSubmit').on('click', function() {
@@ -874,6 +876,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendLocationMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Location Message card clicked');
+    if (!$('#modalSendLocation').hasClass('ui modal')) {
+      $('#modalSendLocation').modal();
+    }
     $('#modalSendLocation').modal('show');
   });
   $('#sendLocationSubmit').on('click', function() {
@@ -884,6 +890,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendContactMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Contact Message card clicked');
+    if (!$('#modalSendContact').hasClass('ui modal')) {
+      $('#modalSendContact').modal();
+    }
     $('#modalSendContact').modal('show');
   });
   $('#sendContactSubmit').on('click', function() {
@@ -894,6 +904,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendPollMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Poll Message card clicked');
+    if (!$('#modalSendPoll').hasClass('ui modal')) {
+      $('#modalSendPoll').modal();
+    }
     $('#modalSendPoll').modal('show');
   });
   $('#sendPollSubmit').on('click', function() {
@@ -913,6 +927,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#reactMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('React Message card clicked');
+    if (!$('#modalReactMessage').hasClass('ui modal')) {
+      $('#modalReactMessage').modal();
+    }
     $('#modalReactMessage').modal('show');
   });
   $('#reactMessageSubmit').on('click', function() {
@@ -923,6 +941,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#markReadMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Mark Read Message card clicked');
+    if (!$('#modalMarkRead').hasClass('ui modal')) {
+      $('#modalMarkRead').modal();
+    }
     $('#modalMarkRead').modal('show');
   });
   $('#markReadSubmit').on('click', function() {
@@ -933,6 +955,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#editMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Edit Message card clicked');
+    if (!$('#modalEditMessage').hasClass('ui modal')) {
+      $('#modalEditMessage').modal();
+    }
     $('#modalEditMessage').modal('show');
   });
   $('#editMessageSubmit').on('click', function() {
@@ -943,9 +969,13 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#chatPresence', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Chat Presence card clicked');
     // Initialize dropdown if not already initialized
     if (!$('#chatpresencetype').hasClass('ui dropdown')) {
       $('#chatpresencetype').dropdown();
+    }
+    if (!$('#modalChatPresence').hasClass('ui modal')) {
+      $('#modalChatPresence').modal();
     }
     $('#modalChatPresence').modal('show');
   });
@@ -957,9 +987,13 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#archiveChat', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Archive Chat card clicked');
     // Initialize checkbox if not already initialized
     if (!$('#archivechatarchive').hasClass('ui checkbox')) {
       $('#archivechatarchive').checkbox();
+    }
+    if (!$('#modalArchiveChat').hasClass('ui modal')) {
+      $('#modalArchiveChat').modal();
     }
     $('#modalArchiveChat').modal('show');
   });
@@ -971,6 +1005,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#setStatus', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Set Status card clicked');
+    if (!$('#modalSetStatus').hasClass('ui modal')) {
+      $('#modalSetStatus').modal();
+    }
     $('#modalSetStatus').modal('show');
   });
   $('#setStatusSubmit').on('click', function() {
@@ -981,6 +1019,10 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#rejectCall', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Reject Call card clicked');
+    if (!$('#modalRejectCall').hasClass('ui modal')) {
+      $('#modalRejectCall').modal();
+    }
     $('#modalRejectCall').modal('show');
   });
   $('#rejectCallSubmit').on('click', function() {
@@ -1385,6 +1427,9 @@ function showWidgets() {
   document.querySelectorAll('.widget').forEach(widget => {
     widget.classList.remove('hidden');
   });
+  // Also ensure all cards with widget class are visible
+  $('.widget').removeClass('hidden');
+  console.log('Widgets shown:', document.querySelectorAll('.widget').length);
 }
 
 function hideWidgets() {
