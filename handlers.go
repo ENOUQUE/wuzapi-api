@@ -1870,11 +1870,11 @@ func (s *server) SendButtons() http.HandlerFunc {
 			return
 		}
 
-		log.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", resp.ID.String()).Msg("Message buttons sent")
+		log.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", string(resp.ID)).Msg("Message buttons sent")
 		response := map[string]interface{}{
 			"Details":   "Sent",
 			"Timestamp": resp.Timestamp.Unix(),
-			"Id":        resp.ID.String(),
+			"Id":        string(resp.ID),
 		}
 		responseJson, err := json.Marshal(response)
 		if err != nil {
