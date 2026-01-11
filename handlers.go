@@ -2579,49 +2579,10 @@ func (s *server) SendTemplate() http.HandlerFunc {
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		txtid := r.Context().Value("userinfo").(Values).Get("Id")
 
 		if clientManager.GetWhatsmeowClient(txtid) == nil {
 			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
-			return
-		}
-
-		msgid := ""
-		var resp whatsmeow.SendResponse
-//var ts time.Time
-
-		decoder := json.NewDecoder(r.Body)
-		var t templateStruct
-		err := decoder.Decode(&t)
-		if err != nil {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
-			return
-		}
-
-		if t.Phone == "" {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Phone in Payload"))
-			return
-		}
-
-		if t.Content == "" {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Content in Payload"))
-			return
-		}
-
-		if t.Footer == "" {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Footer in Payload"))
-			return
-		}
-
-		if len(t.Buttons) < 1 {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Buttons in Payload"))
-			return
-		}
-
-		recipient, ok := parseJID(t.Phone)
-		if !ok {
-			s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
 			return
 		}
 
