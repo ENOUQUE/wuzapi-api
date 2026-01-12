@@ -1038,8 +1038,9 @@ func writeChunk(buf *bytes.Buffer, tag string, data []byte) {
 	}
 }
 
-// Test Chatwoot connection by validating token and inbox access
-// Note: inboxID parameter is actually the inbox ID, not account ID
+// Test Chatwoot connection by validating token
+// Note: We validate the token but don't strictly require inbox access since Chatwoot
+// may create inboxes/conversations automatically when receiving messages
 func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) error {
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
@@ -1047,13 +1048,13 @@ func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) erro
 
 	baseURL := strings.TrimSuffix(chatwootURL, "/")
 	
-	// Try direct inbox access first (most reliable)
-	inboxURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d", baseURL, inboxID)
+	// First, try to list inboxes to validate token
+	inboxesURL := fmt.Sprintf("%s/public/api/v1/inboxes", baseURL)
 	
 	response, err := client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("api_access_token", chatwootToken).
-		Get(inboxURL)
+		Get(inboxesURL)
 
 	if err != nil {
 		return fmt.Errorf("failed to connect to Chatwoot: %v", err)
@@ -1063,43 +1064,79 @@ func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) erro
 		return fmt.Errorf("invalid API token")
 	}
 
-	if response.StatusCode() == 404 {
-		// If direct access fails, try to list inboxes to get more info
-		inboxesURL := fmt.Sprintf("%s/public/api/v1/inboxes", baseURL)
+	// If we can list inboxes, validate token is working
+	if response.StatusCode() == 200 {
+		var inboxes []map[string]interface{}
+		if err := json.Unmarshal(response.Body(), &inboxes); err == nil {
+			inboxFound := false
+			var availableIDs []string
+			for _, inbox := range inboxes {
+				if id, ok := inbox["id"].(float64); ok {
+					availableIDs = append(availableIDs, fmt.Sprintf("%.0f", id))
+					if int(id) == inboxID {
+						inboxFound = true
+					}
+				}
+			}
+			
+			if !inboxFound {
+				// Warn but don't fail - Chatwoot may create inbox automatically
+				log.Warn().
+					Str("url", chatwootURL).
+					Int("inboxID", inboxID).
+					Strs("availableIDs", availableIDs).
+					Msg("Inbox ID not found in list, but will attempt to use it (Chatwoot may create it automatically)")
+			}
+			
+			log.Debug().
+				Str("url", chatwootURL).
+				Int("inboxID", inboxID).
+				Int("status", response.StatusCode()).
+				Bool("inboxFound", inboxFound).
+				Msg("Chatwoot connection test successful - token validated")
+			return nil
+		}
+	}
+
+	// If listing fails, try direct inbox access as fallback
+	if response.StatusCode() >= 400 {
+		inboxURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d", baseURL, inboxID)
 		response2, err2 := client.R().
 			SetHeader("Content-Type", "application/json").
 			SetHeader("api_access_token", chatwootToken).
-			Get(inboxesURL)
+			Get(inboxURL)
 		
-		if err2 == nil && response2.StatusCode() == 200 {
-			// Parse inboxes list to see what's available
-			var inboxes []map[string]interface{}
-			if err := json.Unmarshal(response2.Body(), &inboxes); err == nil {
-				var availableIDs []string
-				for _, inbox := range inboxes {
-					if id, ok := inbox["id"].(float64); ok {
-						availableIDs = append(availableIDs, fmt.Sprintf("%.0f", id))
-					}
-				}
-				if len(availableIDs) > 0 {
-					return fmt.Errorf("inbox ID %d not found. Available inbox IDs: %s", inboxID, strings.Join(availableIDs, ", "))
-				}
-			}
+		if err2 != nil {
+			return fmt.Errorf("failed to connect to Chatwoot: %v", err2)
 		}
-		return fmt.Errorf("inbox ID %d not found or access denied", inboxID)
+		
+		if response2.StatusCode() == 401 {
+			return fmt.Errorf("invalid API token")
+		}
+		
+		if response2.StatusCode() == 200 {
+			log.Debug().
+				Str("url", chatwootURL).
+				Int("inboxID", inboxID).
+				Int("status", response2.StatusCode()).
+				Msg("Chatwoot connection test successful (direct inbox access)")
+			return nil
+		}
+		
+		// If inbox not found but token is valid, allow it (Chatwoot may create automatically)
+		if response2.StatusCode() == 404 {
+			log.Warn().
+				Str("url", chatwootURL).
+				Int("inboxID", inboxID).
+				Msg("Inbox ID not found, but token is valid. Will attempt to use it (Chatwoot may create inbox/conversation automatically)")
+			return nil // Allow it - Chatwoot will handle inbox creation
+		}
+		
+		return fmt.Errorf("Chatwoot returned error status %d: %s", response2.StatusCode(), string(response2.Body()))
 	}
 
-	if response.StatusCode() >= 400 {
-		return fmt.Errorf("Chatwoot returned error status %d: %s", response.StatusCode(), string(response.Body()))
-	}
-
-	log.Debug().
-		Str("url", chatwootURL).
-		Int("inboxID", inboxID).
-		Int("status", response.StatusCode()).
-		Msg("Chatwoot connection test successful")
-
-	return nil
+	// If we get here, something unexpected happened
+	return fmt.Errorf("unexpected response from Chatwoot: status %d", response.StatusCode())
 }
 
 // Send event to Chatwoot integration
