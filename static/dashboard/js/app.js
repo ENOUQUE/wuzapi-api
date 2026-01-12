@@ -19,6 +19,9 @@ document.addEventListener('DOMContentLoaded', function() {
  
   hideWidgets();
 
+  // Initialize all modals on page load to ensure they work properly
+  initializeAllModals();
+
   $('#deleteInstanceModal').modal({
     closable: true,
     onDeny: function() {
@@ -292,31 +295,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  const sendTextMessageCard = document.getElementById('sendTextMessage');
-  if (sendTextMessageCard) {
-    sendTextMessageCard.addEventListener('click', function() {
-      const container = document.getElementById('sendMessageContainer');
-      if (container) {
-        container.innerHTML='';
-        container.classList.add('hidden');
-      }
-      $('#modalSendTextMessage').modal({onApprove: function() {
-        sendTextMessage().then((result)=>{
-          if (container) {
-            container.classList.remove('hidden');
-            if(result.success===true) {
-               container.innerHTML=`Message sent successfully. Id: ${result.data.Id}`
-            } else {
-               container.innerHTML=`Problem sending message: ${result.error}`
-            }
-          }
-        });
-        return false;
-      }}).modal('show');
-    });
-  }
- 
-  // Delete Message handler is now using jQuery event delegation (see line 378)
+  // Send Text Message handler is now using jQuery event delegation (see line 332)
+  // Delete Message handler is now using jQuery event delegation (see line 358)
   
   const userContactsCard = document.getElementById('userContacts');
   if (userContactsCard) {
@@ -329,6 +309,23 @@ document.addEventListener('DOMContentLoaded', function() {
   $(document).on('click', '#sendTextMessage', function(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('Send Text Message card clicked');
+    const container = document.getElementById('sendTextContainer');
+    if (container) {
+      container.innerHTML = '';
+      container.classList.add('hidden');
+    }
+    const textForm = document.getElementById('sendTextForm');
+    if (textForm) {
+      textForm.reset();
+    }
+    // Ensure modal is initialized
+    if (!$('#modalSendTextMessage').hasClass('ui modal')) {
+      $('#modalSendTextMessage').modal({
+        closable: true,
+        autofocus: false
+      });
+    }
     $('#modalSendTextMessage').modal('show');
   });
   $('#sendTextSubmit').on('click', function() {
@@ -356,8 +353,21 @@ document.addEventListener('DOMContentLoaded', function() {
     e.preventDefault();
     e.stopPropagation();
     console.log('Delete Message card clicked');
+    const container = document.getElementById('deleteMessageContainer');
+    if (container) {
+      container.innerHTML = '';
+      container.classList.add('hidden');
+    }
+    const deleteForm = document.getElementById('deleteMessageForm');
+    if (deleteForm) {
+      deleteForm.reset();
+    }
+    // Ensure modal is initialized
     if (!$('#modalDeleteMessage').hasClass('ui modal')) {
-      $('#modalDeleteMessage').modal();
+      $('#modalDeleteMessage').modal({
+        closable: true,
+        autofocus: false
+      });
     }
     $('#modalDeleteMessage').modal('show');
   });
@@ -1430,12 +1440,66 @@ function showWidgets() {
   // Also ensure all cards with widget class are visible
   $('.widget').removeClass('hidden');
   console.log('Widgets shown:', document.querySelectorAll('.widget').length);
+  
+  // Re-initialize modals after widgets are shown to ensure they work
+  setTimeout(function() {
+    initializeAllModals();
+  }, 100);
 }
 
 function hideWidgets() {
   document.querySelectorAll('.widget').forEach(widget => {
     widget.classList.add('hidden');
   });
+}
+
+// Initialize all modals to ensure they work properly
+function initializeAllModals() {
+  // Initialize all message modals - initialize even if hidden
+  const modals = [
+    'modalSendTextMessage',
+    'modalDeleteMessage',
+    'modalSendButtonsMessage',
+    'modalSendListMessage',
+    'modalSendImage',
+    'modalSendAudio',
+    'modalSendVideo',
+    'modalSendDocument',
+    'modalSendSticker',
+    'modalSendLocation',
+    'modalSendContact',
+    'modalSendPoll',
+    'modalReactMessage',
+    'modalMarkRead',
+    'modalEditMessage',
+    'modalChatPresence',
+    'modalArchiveChat',
+    'modalSetStatus',
+    'modalRejectCall'
+  ];
+  
+  let initializedCount = 0;
+  modals.forEach(modalId => {
+    const $modal = $('#' + modalId);
+    if ($modal.length > 0) {
+      // Always initialize, even if already initialized (re-initialize if needed)
+      try {
+        if (!$modal.hasClass('ui modal')) {
+          $modal.modal({
+            closable: true,
+            autofocus: false
+          });
+          initializedCount++;
+        }
+      } catch (e) {
+        console.warn('Error initializing modal ' + modalId + ':', e);
+      }
+    } else {
+      console.warn('Modal not found:', modalId);
+    }
+  });
+  
+  console.log('Modals initialized:', initializedCount, 'of', modals.length);
 }
 
 async function connect(token='') {
