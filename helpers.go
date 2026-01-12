@@ -8,6 +8,8 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -29,6 +31,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jmoiron/sqlx"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/patrickmn/go-cache"
@@ -1035,4 +1038,150 @@ func writeChunk(buf *bytes.Buffer, tag string, data []byte) {
 	if len(data)%2 == 1 {
 		buf.WriteByte(0)
 	}
+}
+
+// Send event to Chatwoot integration
+func sendToChatwoot(eventData map[string]interface{}, userID string, token string, db *sqlx.DB) {
+	if db == nil {
+		log.Debug().Str("userID", userID).Msg("Chatwoot integration skipped - no database connection")
+		return
+	}
+
+	// Get Chatwoot configuration from database
+	var enabled bool
+	var chatwootURL, chatwootToken string
+	var accountID int
+
+	err := db.QueryRow(`
+        SELECT 
+            COALESCE(chatwoot_enabled, false),
+            COALESCE(chatwoot_url, ''),
+            COALESCE(chatwoot_token, ''),
+            COALESCE(chatwoot_account_id, 0)
+        FROM users WHERE id = $1`, userID).Scan(&enabled, &chatwootURL, &chatwootToken, &accountID)
+
+	if err != nil {
+		log.Debug().Err(err).Str("userID", userID).Msg("Failed to get Chatwoot configuration")
+		return
+	}
+
+	if !enabled || chatwootURL == "" || chatwootToken == "" {
+		return
+	}
+
+	// Transform event to Chatwoot format
+	chatwootPayload := transformEventToChatwoot(eventData, accountID, userID)
+
+	// Send to Chatwoot
+	// Chatwoot webhook endpoint format: /public/api/v1/inboxes/{inbox_id}/messages
+	// We need to find the inbox_id from the account_id, but for now we'll use a webhook endpoint
+	// The correct endpoint for Chatwoot WhatsApp integration is typically:
+	// POST /public/api/v1/inboxes/{inbox_id}/messages
+	// But we'll use the webhook endpoint which is: /public/api/v1/inboxes/{inbox_id}/webhooks/whatsapp
+	
+	client := resty.New()
+	client.SetTimeout(10 * time.Second)
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: false})
+
+	// Remove trailing slash from URL
+	baseURL := strings.TrimSuffix(chatwootURL, "/")
+	
+	// Use webhook endpoint for WhatsApp events
+	webhookURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d/webhooks/whatsapp", baseURL, accountID)
+	
+	response, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("api_access_token", chatwootToken).
+		SetBody(chatwootPayload).
+		Post(webhookURL)
+
+	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Str("url", chatwootURL).Msg("Failed to send event to Chatwoot")
+		return
+	}
+
+	if response.StatusCode() >= 400 {
+		log.Warn().
+			Int("status", response.StatusCode()).
+			Str("userID", userID).
+			Str("response", string(response.Body())).
+			Msg("Chatwoot returned error status")
+		return
+	}
+
+	log.Debug().Str("userID", userID).Str("eventType", eventData["type"].(string)).Msg("Event sent to Chatwoot successfully")
+}
+
+// Transform WhatsApp event to Chatwoot format
+func transformEventToChatwoot(eventData map[string]interface{}, accountID int, userID string) map[string]interface{} {
+	eventType, _ := eventData["type"].(string)
+	
+	// Base payload structure for Chatwoot
+	payload := map[string]interface{}{
+		"event":      "message",
+		"account_id": accountID,
+	}
+
+	// Handle different event types
+	switch eventType {
+	case "Message":
+		if info, ok := eventData["Info"].(map[string]interface{}); ok {
+			chat := ""
+			sender := ""
+			messageText := ""
+			messageType := "text"
+
+			if chatVal, ok := info["Chat"].(string); ok {
+				chat = chatVal
+			}
+			if senderVal, ok := info["Sender"].(string); ok {
+				sender = senderVal
+			}
+
+			// Extract message content
+			if message, ok := eventData["Message"].(map[string]interface{}); ok {
+				if textMsg, ok := message["conversation"].(string); ok {
+					messageText = textMsg
+				} else if extendedTextMsg, ok := message["extendedTextMessage"].(map[string]interface{}); ok {
+					if text, ok := extendedTextMsg["text"].(string); ok {
+						messageText = text
+					}
+				} else if imageMsg, ok := message["imageMessage"].(map[string]interface{}); ok {
+					messageType = "image"
+					if caption, ok := imageMsg["caption"].(string); ok {
+						messageText = caption
+					}
+				} else if videoMsg, ok := message["videoMessage"].(map[string]interface{}); ok {
+					messageType = "video"
+					if caption, ok := videoMsg["caption"].(string); ok {
+						messageText = caption
+					}
+				} else if audioMsg, ok := message["audioMessage"].(map[string]interface{}); ok {
+					messageType = "audio"
+				} else if documentMsg, ok := message["documentMessage"].(map[string]interface{}); ok {
+					messageType = "file"
+					if fileName, ok := documentMsg["fileName"].(string); ok {
+						messageText = fileName
+					}
+				}
+			}
+
+			payload["content"] = messageText
+			payload["message_type"] = messageType
+			payload["source_id"] = sender
+			payload["inbox_id"] = accountID
+			
+			// Extract phone number from JID
+			if strings.Contains(sender, "@") {
+				phone := strings.Split(sender, "@")[0]
+				payload["phone_number"] = phone
+			}
+		}
+	default:
+		// For other event types, send raw event data
+		payload["event"] = eventType
+		payload["data"] = eventData
+	}
+
+	return payload
 }

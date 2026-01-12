@@ -151,6 +151,12 @@
           <div class="description">Configure HMAC key for webhook security.</div>
         </div>
       </div>
+      <div class="purple card hidden widget" style="cursor: pointer;" id="chatwootConfig">
+        <div class="content"><a class="ui purple right ribbon label">Integração</a>
+          <div class="header">Chatwoot</div>
+          <div class="description">Configure Chatwoot integration for customer support.</div>
+        </div>
+      </div>
     </div>
 
     <div class="ui horizontal divider widget"> User </div>
@@ -884,6 +890,73 @@
       <button class="ui black deny button">Cancel</button>
       <button type="submit" form="addInstanceForm" class="ui positive right labeled icon button">
         Submit
+        <i class="checkmark icon"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Chatwoot Configuration Modal -->
+  <div class="ui modal" id="modalChatwootConfig"><i class="close icon"></i>
+    <div class="header">Chatwoot Integration</div>
+    <div class="content">
+      <form class="ui form" id="chatwootConfigForm">
+        <div class="field">
+          <div class="ui toggle checkbox" id="chatwootEnabledToggle">
+            <input type="checkbox" name="enabled" id="chatwootEnabled">
+            <label>Enable Chatwoot Integration</label>
+          </div>
+          <small>Enable integration with Chatwoot for customer support</small>
+        </div>
+
+        <div id="chatwootConfigFields" style="display: none;">
+          <div class="field">
+            <label>Chatwoot URL <span class="required">*</span></label>
+            <input type="url" name="url" id="chatwootUrl" placeholder="https://your-chatwoot-instance.com" required>
+            <small>Base URL of your Chatwoot instance (without trailing slash)</small>
+          </div>
+
+          <div class="field">
+            <label>API Access Token <span class="required">*</span></label>
+            <input type="password" name="token" id="chatwootToken" placeholder="Enter API access token" required>
+            <small>API access token from Chatwoot settings</small>
+            <div class="ui buttons" style="margin-top: 10px;">
+              <button type="button" class="ui black button" id="showChatwootToken">
+                <i class="eye icon"></i> Show Token
+              </button>
+              <button type="button" class="ui black button" id="hideChatwootToken" style="display: none;">
+                <i class="eye slash icon"></i> Hide Token
+              </button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Account ID <span class="required">*</span></label>
+            <input type="number" name="account_id" id="chatwootAccountId" placeholder="1" min="1" required>
+            <small>Chatwoot account ID where messages will be sent</small>
+          </div>
+
+          <div class="ui info message">
+            <div class="header">How to get your Chatwoot credentials:</div>
+            <ol class="ui list">
+              <li>Log in to your Chatwoot instance</li>
+              <li>Go to Settings → Applications → API Tokens</li>
+              <li>Create a new API access token</li>
+              <li>Copy the token and paste it above</li>
+              <li>Find your Account ID in the URL or Settings → Accounts</li>
+            </ol>
+          </div>
+        </div>
+
+        <div id="chatwootConfigContainer" class="hidden"></div>
+      </form>
+    </div>
+    <div class="actions">
+      <button class="ui black deny button">Cancel</button>
+      <button type="button" class="ui negative button" id="deleteChatwootConfigBtn" style="display: none;">
+        <i class="trash icon"></i> Delete Configuration
+      </button>
+      <button type="submit" form="chatwootConfigForm" class="ui positive right labeled icon button">
+        Save Configuration
         <i class="checkmark icon"></i>
       </button>
     </div>

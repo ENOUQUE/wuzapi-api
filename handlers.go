@@ -6471,3 +6471,147 @@ func (s *server) DownloadSticker() http.HandlerFunc {
 		return
 	}
 }
+
+// Configure Chatwoot Integration
+func (s *server) ConfigureChatwoot() http.HandlerFunc {
+	type chatwootConfigStruct struct {
+		Enabled   bool   `json:"enabled"`
+		URL       string `json:"url"`
+		Token     string `json:"token"`
+		AccountID int    `json:"account_id"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+		token := r.Context().Value("userinfo").(Values).Get("Token")
+
+		decoder := json.NewDecoder(r.Body)
+		var t chatwootConfigStruct
+		err := decoder.Decode(&t)
+		if err != nil {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode payload"))
+			return
+		}
+
+		// Validate URL if enabled
+		if t.Enabled {
+			if t.URL == "" {
+				s.Respond(w, r, http.StatusBadRequest, errors.New("Chatwoot URL is required when enabled"))
+				return
+			}
+			if t.Token == "" {
+				s.Respond(w, r, http.StatusBadRequest, errors.New("Chatwoot token is required when enabled"))
+				return
+			}
+			if t.AccountID == 0 {
+				s.Respond(w, r, http.StatusBadRequest, errors.New("Chatwoot account ID is required when enabled"))
+				return
+			}
+		}
+
+		// Update database
+		_, err = s.db.Exec(`
+            UPDATE users SET 
+                chatwoot_enabled = $1, 
+                chatwoot_url = $2, 
+                chatwoot_token = $3, 
+                chatwoot_account_id = $4 
+            WHERE id = $5`,
+			t.Enabled, t.URL, t.Token, t.AccountID, txtid)
+
+		if err != nil {
+			log.Error().Err(err).Str("userID", txtid).Msg("Failed to save Chatwoot configuration")
+			s.Respond(w, r, http.StatusInternalServerError, errors.New("failed to save Chatwoot configuration"))
+			return
+		}
+
+		response := map[string]interface{}{
+			"Details": "Chatwoot configuration saved successfully",
+			"enabled": t.Enabled,
+		}
+		s.respondWithJSON(w, http.StatusOK, response)
+	}
+}
+
+// Get Chatwoot Configuration
+func (s *server) GetChatwootConfig() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+
+		var enabled bool
+		var url, token string
+		var accountID int
+
+		err := s.db.QueryRow(`
+            SELECT 
+                COALESCE(chatwoot_enabled, false),
+                COALESCE(chatwoot_url, ''),
+                COALESCE(chatwoot_token, ''),
+                COALESCE(chatwoot_account_id, 0)
+            FROM users WHERE id = $1`, txtid).Scan(&enabled, &url, &token, &accountID)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+					"enabled":    false,
+					"url":        "",
+					"token":      "",
+					"account_id": 0,
+				})
+				return
+			}
+
+			log.Error().Err(err).Str("userID", txtid).Msg("Failed to get Chatwoot configuration")
+			s.respondWithJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error": "failed to get Chatwoot configuration",
+			})
+			return
+		}
+
+		// Mask token for security
+		maskedToken := ""
+		if token != "" {
+			if len(token) > 8 {
+				maskedToken = token[:4] + "***" + token[len(token)-4:]
+			} else {
+				maskedToken = "***"
+			}
+		}
+
+		response := map[string]interface{}{
+			"enabled":    enabled,
+			"url":        url,
+			"token":      maskedToken,
+			"account_id": accountID,
+		}
+
+		s.respondWithJSON(w, http.StatusOK, response)
+	}
+}
+
+// Delete Chatwoot Configuration
+func (s *server) DeleteChatwootConfig() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+
+		// Clear Chatwoot configuration
+		_, err := s.db.Exec(`
+            UPDATE users SET 
+                chatwoot_enabled = false,
+                chatwoot_url = '',
+                chatwoot_token = '',
+                chatwoot_account_id = 0
+            WHERE id = $1`, txtid)
+
+		if err != nil {
+			s.respondWithJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error": "failed to delete Chatwoot configuration",
+			})
+			return
+		}
+
+		s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"Details": "Chatwoot configuration deleted successfully",
+		})
+	}
+}

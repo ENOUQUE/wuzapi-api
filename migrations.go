@@ -66,6 +66,42 @@ var migrations = []Migration{
 		UpSQL: addHmacKeySQL,
 	},
 	{
+		ID:   10,
+		Name: "add_chatwoot_support",
+		UpSQL: `
+            -- PostgreSQL version
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'chatwoot_enabled'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN chatwoot_enabled BOOLEAN DEFAULT FALSE;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'chatwoot_url'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN chatwoot_url TEXT DEFAULT '';
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'chatwoot_token'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN chatwoot_token TEXT DEFAULT '';
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'chatwoot_account_id'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN chatwoot_account_id INTEGER DEFAULT 0;
+                END IF;
+            END $$;
+            
+            -- SQLite version (handled in code)
+            `,
+	},
+	{
 		ID:    8,
 		Name:  "add_data_json",
 		UpSQL: addDataJsonSQL,
@@ -432,6 +468,22 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 		if db.DriverName() == "sqlite" {
 			// Add dataJson column to message_history table for SQLite
 			err = addColumnIfNotExistsSQLite(tx, "message_history", "datajson", "TEXT")
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == 10 {
+		if db.DriverName() == "sqlite" {
+			// Add Chatwoot columns for SQLite
+			err = addColumnIfNotExistsSQLite(tx, "users", "chatwoot_enabled", "BOOLEAN DEFAULT 0")
+			if err == nil {
+				err = addColumnIfNotExistsSQLite(tx, "users", "chatwoot_url", "TEXT DEFAULT ''")
+			}
+			if err == nil {
+				err = addColumnIfNotExistsSQLite(tx, "users", "chatwoot_token", "TEXT DEFAULT ''")
+			}
+			if err == nil {
+				err = addColumnIfNotExistsSQLite(tx, "users", "chatwoot_account_id", "INTEGER DEFAULT 0")
+			}
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}

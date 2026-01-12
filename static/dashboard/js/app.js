@@ -19,8 +19,11 @@ document.addEventListener('DOMContentLoaded', function() {
  
   hideWidgets();
 
-  // Initialize all modals on page load to ensure they work properly
-  initializeAllModals();
+  // Initialize all modals after DOM is fully loaded
+  // Use setTimeout to ensure all HTML elements are rendered
+  setTimeout(function() {
+    initializeAllModals();
+  }, 500);
 
   $('#deleteInstanceModal').modal({
     closable: true,
@@ -591,6 +594,14 @@ document.addEventListener('DOMContentLoaded', function() {
   if (webhookConfigCard) {
     webhookConfigCard.addEventListener('click', function() {
       webhookModal();
+    });
+  }
+
+  // Chatwoot Configuration
+  const chatwootConfigCard = document.getElementById('chatwootConfig');
+  if (chatwootConfigCard) {
+    chatwootConfigCard.addEventListener('click', function() {
+      chatwootModal();
     });
   }
 
@@ -1443,8 +1454,9 @@ function showWidgets() {
   
   // Re-initialize modals after widgets are shown to ensure they work
   setTimeout(function() {
-    initializeAllModals();
-  }, 100);
+    const result = initializeAllModals();
+    console.log('Modals re-initialized after showing widgets:', result);
+  }, 300);
 }
 
 function hideWidgets() {
@@ -1479,28 +1491,216 @@ function initializeAllModals() {
   ];
   
   let initializedCount = 0;
+  let notFoundCount = 0;
+  
   modals.forEach(modalId => {
     const $modal = $('#' + modalId);
     if ($modal.length > 0) {
       // Always initialize, even if already initialized (re-initialize if needed)
       try {
-        if (!$modal.hasClass('ui modal')) {
-          $modal.modal({
-            closable: true,
-            autofocus: false
-          });
-          initializedCount++;
+        // Destroy existing modal if it exists to avoid conflicts
+        if ($modal.hasClass('ui modal')) {
+          $modal.modal('destroy');
         }
+        // Initialize the modal
+        $modal.modal({
+          closable: true,
+          autofocus: false,
+          onShow: function() {
+            // Reset form when modal is shown
+            const form = $modal.find('form');
+            if (form.length > 0) {
+              form[0].reset();
+            }
+            // Clear any error/success messages
+            const container = $modal.find('[id$="Container"]');
+            if (container.length > 0) {
+              container.html('');
+              container.addClass('hidden');
+            }
+          }
+        });
+        initializedCount++;
       } catch (e) {
-        console.warn('Error initializing modal ' + modalId + ':', e);
+        console.error('Error initializing modal ' + modalId + ':', e);
       }
     } else {
-      console.warn('Modal not found:', modalId);
+      notFoundCount++;
+      console.warn('Modal not found in DOM:', modalId);
     }
   });
   
-  console.log('Modals initialized:', initializedCount, 'of', modals.length);
+  console.log('Modals initialization complete:', initializedCount, 'initialized,', notFoundCount, 'not found,', modals.length, 'total');
+  
+  // Return status for debugging
+  return {
+    initialized: initializedCount,
+    notFound: notFoundCount,
+    total: modals.length
+  };
 }
+
+// Chatwoot Configuration Functions
+function chatwootModal() {
+  loadChatwootConfig().then(() => {
+    $('#modalChatwootConfig').modal({
+      onApprove: function() {
+        saveChatwootConfig();
+        return false; // Prevent modal from closing automatically
+      }
+    }).modal('show');
+  });
+}
+
+async function loadChatwootConfig() {
+  try {
+    const token = getLocalStorageItem('token');
+    const res = await fetch(baseUrl + '/session/chatwoot/config', {
+      method: 'GET',
+      headers: {
+        'token': token
+      }
+    });
+
+    if (res.ok) {
+      const config = await res.json();
+      $('#chatwootEnabled').prop('checked', config.enabled || false);
+      $('#chatwootUrl').val(config.url || '');
+      $('#chatwootToken').val(config.token || '');
+      $('#chatwootAccountId').val(config.account_id || '');
+
+      // Show/hide config fields based on enabled state
+      if (config.enabled) {
+        $('#chatwootConfigFields').show();
+        $('#deleteChatwootConfigBtn').show();
+      } else {
+        $('#chatwootConfigFields').hide();
+        $('#deleteChatwootConfigBtn').hide();
+      }
+
+      // Toggle fields visibility when checkbox changes
+      $('#chatwootEnabledToggle').checkbox({
+        onChange: function() {
+          const enabled = $('#chatwootEnabled').is(':checked');
+          $('#chatwootConfigFields').toggle(enabled);
+          $('#deleteChatwootConfigBtn').toggle(enabled);
+        }
+      });
+    } else {
+      showError('Failed to load Chatwoot configuration');
+    }
+  } catch (error) {
+    console.error('Error loading Chatwoot config:', error);
+    showError('Error loading Chatwoot configuration');
+  }
+}
+
+async function saveChatwootConfig() {
+  const enabled = $('#chatwootEnabled').is(':checked');
+  const url = $('#chatwootUrl').val().trim();
+  const token = $('#chatwootToken').val().trim();
+  const accountId = parseInt($('#chatwootAccountId').val());
+
+  if (enabled) {
+    if (!url) {
+      showError('Chatwoot URL is required');
+      return;
+    }
+    if (!token) {
+      showError('API access token is required');
+      return;
+    }
+    if (!accountId || accountId <= 0) {
+      showError('Account ID must be a positive number');
+      return;
+    }
+  }
+
+  try {
+    const tokenHeader = getLocalStorageItem('token');
+    const res = await fetch(baseUrl + '/session/chatwoot/config', {
+      method: 'POST',
+      headers: {
+        'token': tokenHeader,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        enabled: enabled,
+        url: url,
+        token: token,
+        account_id: accountId
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.code === 200) {
+      $.toast({
+        class: 'success',
+        message: 'Chatwoot configuration saved successfully!'
+      });
+      $('#modalChatwootConfig').modal('hide');
+    } else {
+      showError(data.error || 'Failed to save Chatwoot configuration');
+    }
+  } catch (error) {
+    console.error('Error saving Chatwoot config:', error);
+    showError('Error saving Chatwoot configuration');
+  }
+}
+
+async function deleteChatwootConfig() {
+  if (!confirm('Are you sure you want to delete the Chatwoot configuration?')) {
+    return;
+  }
+
+  try {
+    const token = getLocalStorageItem('token');
+    const res = await fetch(baseUrl + '/session/chatwoot/config', {
+      method: 'DELETE',
+      headers: {
+        'token': token
+      }
+    });
+
+    const data = await res.json();
+    if (res.ok && data.code === 200) {
+      $.toast({
+        class: 'success',
+        message: 'Chatwoot configuration deleted successfully!'
+      });
+      $('#chatwootEnabled').prop('checked', false);
+      $('#chatwootUrl').val('');
+      $('#chatwootToken').val('');
+      $('#chatwootAccountId').val('');
+      $('#chatwootConfigFields').hide();
+      $('#deleteChatwootConfigBtn').hide();
+      $('#modalChatwootConfig').modal('hide');
+    } else {
+      showError(data.error || 'Failed to delete Chatwoot configuration');
+    }
+  } catch (error) {
+    console.error('Error deleting Chatwoot config:', error);
+    showError('Error deleting Chatwoot configuration');
+  }
+}
+
+// Chatwoot Token Show/Hide Toggle
+$(document).on('click', '#showChatwootToken', function() {
+  $('#chatwootToken').attr('type', 'text');
+  $('#showChatwootToken').hide();
+  $('#hideChatwootToken').show();
+});
+
+$(document).on('click', '#hideChatwootToken', function() {
+  $('#chatwootToken').attr('type', 'password');
+  $('#showChatwootToken').show();
+  $('#hideChatwootToken').hide();
+});
+
+// Chatwoot Delete Button Handler
+$(document).on('click', '#deleteChatwootConfigBtn', function() {
+  deleteChatwootConfig();
+});
 
 async function connect(token='') {
   console.log("Connecting...");
