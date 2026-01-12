@@ -285,12 +285,29 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 				var postmap map[string]interface{}
 
 				if err := json.Unmarshal([]byte(jsonStr), &postmap); err == nil {
+					// Successfully unmarshaled JSON, add instanceName and userID
 					if instanceName, ok := payload["instanceName"]; ok {
 						postmap["instanceName"] = instanceName
 					}
 					postmap["userID"] = userID
 					body = postmap
+				} else {
+					// If unmarshal fails, create a new map with the original data
+					log.Warn().Err(err).Msg("Failed to unmarshal jsonData, creating new payload structure")
+					body = map[string]interface{}{
+						"jsonData":     jsonStr,
+						"userID":       userID,
+						"instanceName": payload["instanceName"],
+					}
 				}
+			} else {
+				// No jsonData field, create payload from map
+				bodyMap := make(map[string]interface{})
+				for k, v := range payload {
+					bodyMap[k] = v
+				}
+				bodyMap["userID"] = userID
+				body = bodyMap
 			}
 
 			// Marshal body to JSON for HMAC signature
