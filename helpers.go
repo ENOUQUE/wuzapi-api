@@ -1039,6 +1039,7 @@ func writeChunk(buf *bytes.Buffer, tag string, data []byte) {
 }
 
 // Test Chatwoot connection by validating token and inbox access
+// Note: inboxID parameter is actually the inbox ID, not account ID
 func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) error {
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
@@ -1046,7 +1047,7 @@ func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) erro
 
 	baseURL := strings.TrimSuffix(chatwootURL, "/")
 	
-	// Test inbox access
+	// Try direct inbox access first (most reliable)
 	inboxURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d", baseURL, inboxID)
 	
 	response, err := client.R().
@@ -1063,11 +1064,103 @@ func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) erro
 	}
 
 	if response.StatusCode() == 404 {
+		// If direct access fails, try to list inboxes to get more info
+		inboxesURL := fmt.Sprintf("%s/public/api/v1/inboxes", baseURL)
+		response2, err2 := client.R().
+			SetHeader("Content-Type", "application/json").
+			SetHeader("api_access_token", chatwootToken).
+			Get(inboxesURL)
+		
+		if err2 == nil && response2.StatusCode() == 200 {
+			// Parse inboxes list to see what's available
+			var inboxes []map[string]interface{}
+			if err := json.Unmarshal(response2.Body(), &inboxes); err == nil {
+				var availableIDs []string
+				for _, inbox := range inboxes {
+					if id, ok := inbox["id"].(float64); ok {
+						availableIDs = append(availableIDs, fmt.Sprintf("%.0f", id))
+					}
+				}
+				if len(availableIDs) > 0 {
+					return fmt.Errorf("inbox ID %d not found. Available inbox IDs: %s", inboxID, strings.Join(availableIDs, ", "))
+				}
+			}
+		}
 		return fmt.Errorf("inbox ID %d not found or access denied", inboxID)
 	}
 
 	if response.StatusCode() >= 400 {
 		return fmt.Errorf("Chatwoot returned error status %d: %s", response.StatusCode(), string(response.Body()))
+	}
+
+	log.Debug().
+		Str("url", chatwootURL).
+		Int("inboxID", inboxID).
+		Int("status", response.StatusCode()).
+		Msg("Chatwoot connection test successful")
+
+	return nil
+	
+	response, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("api_access_token", chatwootToken).
+		Get(inboxesURL)
+
+	if err != nil {
+		return fmt.Errorf("failed to connect to Chatwoot: %v", err)
+	}
+
+	if response.StatusCode() == 401 {
+		return fmt.Errorf("invalid API token")
+	}
+
+	if response.StatusCode() >= 400 {
+		// If listing inboxes fails, try direct inbox access as fallback
+		inboxURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d", baseURL, inboxID)
+		response2, err2 := client.R().
+			SetHeader("Content-Type", "application/json").
+			SetHeader("api_access_token", chatwootToken).
+			Get(inboxURL)
+		
+		if err2 != nil {
+			return fmt.Errorf("failed to connect to Chatwoot: %v", err2)
+		}
+		
+		if response2.StatusCode() == 401 {
+			return fmt.Errorf("invalid API token")
+		}
+		
+		if response2.StatusCode() == 404 {
+			return fmt.Errorf("inbox ID %d not found or access denied", inboxID)
+		}
+		
+		if response2.StatusCode() >= 400 {
+			return fmt.Errorf("Chatwoot returned error status %d: %s", response2.StatusCode(), string(response2.Body()))
+		}
+		
+		log.Debug().
+			Str("url", chatwootURL).
+			Int("inboxID", inboxID).
+			Int("status", response2.StatusCode()).
+			Msg("Chatwoot connection test successful (direct inbox access)")
+		
+		return nil
+	}
+
+	// Parse inboxes list to verify the inbox ID exists
+	var inboxes []map[string]interface{}
+	if err := json.Unmarshal(response.Body(), &inboxes); err == nil {
+		inboxFound := false
+		for _, inbox := range inboxes {
+			if id, ok := inbox["id"].(float64); ok && int(id) == inboxID {
+				inboxFound = true
+				break
+			}
+		}
+		
+		if !inboxFound {
+			return fmt.Errorf("inbox ID %d not found in your accessible inboxes", inboxID)
+		}
 	}
 
 	log.Debug().
@@ -1173,12 +1266,26 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 		return
 	}
 
-	log.Debug().
-		Str("userID", userID).
-		Str("eventType", eventData["type"].(string)).
-		Int("inboxID", inboxID).
-		Int("status", response.StatusCode()).
-		Msg("Event sent to Chatwoot successfully")
+	// Parse response to get Chatwoot IDs (similar to Evolution API)
+	var chatwootResponse map[string]interface{}
+	if err := json.Unmarshal(response.Body(), &chatwootResponse); err == nil {
+		if messageID, ok := chatwootResponse["id"].(float64); ok {
+			log.Debug().
+				Str("userID", userID).
+				Str("eventType", eventData["type"].(string)).
+				Int("inboxID", inboxID).
+				Int("status", response.StatusCode()).
+				Int("chatwootMessageId", int(messageID)).
+				Msg("Event sent to Chatwoot successfully")
+		}
+	} else {
+		log.Debug().
+			Str("userID", userID).
+			Str("eventType", eventData["type"].(string)).
+			Int("inboxID", inboxID).
+			Int("status", response.StatusCode()).
+			Msg("Event sent to Chatwoot successfully")
+	}
 }
 
 // Transform WhatsApp event to Chatwoot format
@@ -1303,39 +1410,49 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			}
 
 			// Chatwoot expects this format for incoming messages
+			// The source_id should be a unique identifier for the contact/conversation
 			// For groups, use the group JID as source_id
-			// For individual messages, use phone number as source_id
+			// For individual messages, use phone number as source_id (Chatwoot will create/find contact)
 			var sourceID string
 			if isGroup && chatJID != "" {
 				// For groups, use the group JID (e.g., "120363420159035460@g.us")
+				// Remove @g.us suffix for source_id if needed, or keep it - Chatwoot handles both
 				sourceID = chatJID
 			} else {
-				// For individual messages, use phone number
+				// For individual messages, use phone number (Chatwoot will create/find contact automatically)
+				// Format: just the number without @s.whatsapp.net
 				sourceID = phoneNumber
 			}
 
+			// Build payload according to Chatwoot API format
 			payload := map[string]interface{}{
 				"content":      messageText,
 				"message_type": messageType,
-				"source_id":    sourceID, // Group JID for groups, phone number for individuals
+				"source_id":    sourceID, // Unique identifier for contact/conversation
 				"inbox_id":     inboxID,
 			}
 
 			// Add phone_number if available (required for WhatsApp channel)
-			// For groups, this is the sender's phone number within the group
+			// This is the sender's phone number (required for WhatsApp inboxes)
 			if phoneNumber != "" {
 				payload["phone_number"] = phoneNumber
 			}
 
-			// Add contact name if available
-			if pushName != "" {
-				payload["sender"] = map[string]interface{}{
-					"name":         pushName,
-					"phone_number": phoneNumber,
+			// Add sender information if available (helps Chatwoot create/update contact)
+			if pushName != "" || phoneNumber != "" {
+				senderInfo := make(map[string]interface{})
+				if pushName != "" {
+					senderInfo["name"] = pushName
+				}
+				if phoneNumber != "" {
+					senderInfo["phone_number"] = phoneNumber
+				}
+				if len(senderInfo) > 0 {
+					payload["sender"] = senderInfo
 				}
 			}
 
-			// For groups, add group information
+			// For groups, add group information (optional, helps identify group conversations)
 			if isGroup && chatJID != "" {
 				payload["group_id"] = chatJID
 			}
