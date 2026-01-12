@@ -1611,7 +1611,7 @@ async function saveChatwootConfig() {
       return;
     }
     if (!accountId || accountId <= 0) {
-      showError('Account ID must be a positive number');
+      showError('Inbox ID must be a positive number');
       return;
     }
   }

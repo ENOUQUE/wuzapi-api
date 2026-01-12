@@ -930,9 +930,9 @@
           </div>
 
           <div class="field">
-            <label>Account ID <span class="required">*</span></label>
+            <label>Inbox ID <span class="required">*</span></label>
             <input type="number" name="account_id" id="chatwootAccountId" placeholder="1" min="1" required>
-            <small>Chatwoot account ID where messages will be sent</small>
+            <small>Chatwoot Inbox ID (not Account ID). Find it in Settings → Inboxes → Your WhatsApp Inbox → Settings. The ID is in the URL or API response.</small>
           </div>
 
           <div class="ui info message">
@@ -942,7 +942,7 @@
               <li>Go to Settings → Applications → API Tokens</li>
               <li>Create a new API access token</li>
               <li>Copy the token and paste it above</li>
-              <li>Find your Account ID in the URL or Settings → Accounts</li>
+              <li><strong>Important:</strong> You need the <strong>Inbox ID</strong>, not Account ID. Go to Settings → Inboxes → Select your WhatsApp inbox → The ID is in the URL (e.g., /inboxes/1) or check the API response</li>
             </ol>
           </div>
         </div>

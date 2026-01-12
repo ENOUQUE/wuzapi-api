@@ -1048,7 +1048,7 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 	// Get Chatwoot configuration from database
 	var enabled bool
 	var chatwootURL, chatwootToken string
-	var accountID int
+	var inboxID int
 
 	err := db.QueryRow(`
         SELECT 
@@ -1056,27 +1056,27 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
             COALESCE(chatwoot_url, ''),
             COALESCE(chatwoot_token, ''),
             COALESCE(chatwoot_account_id, 0)
-        FROM users WHERE id = $1`, userID).Scan(&enabled, &chatwootURL, &chatwootToken, &accountID)
+        FROM users WHERE id = $1`, userID).Scan(&enabled, &chatwootURL, &chatwootToken, &inboxID)
 
 	if err != nil {
 		log.Debug().Err(err).Str("userID", userID).Msg("Failed to get Chatwoot configuration")
 		return
 	}
 
-	if !enabled || chatwootURL == "" || chatwootToken == "" {
+	if !enabled || chatwootURL == "" || chatwootToken == "" || inboxID == 0 {
 		return
 	}
 
 	// Transform event to Chatwoot format
-	chatwootPayload := transformEventToChatwoot(eventData, accountID, userID)
+	chatwootPayload := transformEventToChatwoot(eventData, inboxID)
+	
+	// Skip if payload is nil (event type not supported)
+	if chatwootPayload == nil {
+		return
+	}
 
 	// Send to Chatwoot
-	// Chatwoot webhook endpoint format: /public/api/v1/inboxes/{inbox_id}/messages
-	// We need to find the inbox_id from the account_id, but for now we'll use a webhook endpoint
-	// The correct endpoint for Chatwoot WhatsApp integration is typically:
-	// POST /public/api/v1/inboxes/{inbox_id}/messages
-	// But we'll use the webhook endpoint which is: /public/api/v1/inboxes/{inbox_id}/webhooks/whatsapp
-	
+	// Chatwoot endpoint format: POST /public/api/v1/inboxes/{inbox_id}/messages
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: false})
@@ -1084,17 +1084,25 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 	// Remove trailing slash from URL
 	baseURL := strings.TrimSuffix(chatwootURL, "/")
 	
-	// Use webhook endpoint for WhatsApp events
-	webhookURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d/webhooks/whatsapp", baseURL, accountID)
+	// Use the correct endpoint for WhatsApp messages
+	messageURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d/messages", baseURL, inboxID)
+	
+	// Log payload for debugging
+	payloadJSON, _ := json.Marshal(chatwootPayload)
+	log.Debug().
+		Str("userID", userID).
+		Str("url", messageURL).
+		Str("payload", string(payloadJSON)).
+		Msg("Sending event to Chatwoot")
 	
 	response, err := client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("api_access_token", chatwootToken).
 		SetBody(chatwootPayload).
-		Post(webhookURL)
+		Post(messageURL)
 
 	if err != nil {
-		log.Error().Err(err).Str("userID", userID).Str("url", chatwootURL).Msg("Failed to send event to Chatwoot")
+		log.Error().Err(err).Str("userID", userID).Str("url", messageURL).Msg("Failed to send event to Chatwoot")
 		return
 	}
 
@@ -1102,24 +1110,25 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 		log.Warn().
 			Int("status", response.StatusCode()).
 			Str("userID", userID).
+			Str("url", messageURL).
 			Str("response", string(response.Body())).
+			Str("payload", string(payloadJSON)).
 			Msg("Chatwoot returned error status")
 		return
 	}
 
-	log.Debug().Str("userID", userID).Str("eventType", eventData["type"].(string)).Msg("Event sent to Chatwoot successfully")
+	log.Debug().
+		Str("userID", userID).
+		Str("eventType", eventData["type"].(string)).
+		Int("inboxID", inboxID).
+		Int("status", response.StatusCode()).
+		Msg("Event sent to Chatwoot successfully")
 }
 
 // Transform WhatsApp event to Chatwoot format
-func transformEventToChatwoot(eventData map[string]interface{}, accountID int, userID string) map[string]interface{} {
+func transformEventToChatwoot(eventData map[string]interface{}, inboxID int) map[string]interface{} {
 	eventType, _ := eventData["type"].(string)
 	
-	// Base payload structure for Chatwoot
-	payload := map[string]interface{}{
-		"event":      "message",
-		"account_id": accountID,
-	}
-
 	// Handle different event types
 	switch eventType {
 	case "Message":
@@ -1127,9 +1136,35 @@ func transformEventToChatwoot(eventData map[string]interface{}, accountID int, u
 			sender := ""
 			messageText := ""
 			messageType := "text"
+			var phoneNumber string
+			var pushName string
+			var isGroup bool
 
 			if senderVal, ok := info["Sender"].(string); ok {
 				sender = senderVal
+				// Extract phone number from JID
+				if strings.Contains(sender, "@") {
+					phoneNumber = strings.Split(sender, "@")[0]
+					// Remove any prefix like "5516991643913:49" -> "5516991643913"
+					if strings.Contains(phoneNumber, ":") {
+						phoneNumber = strings.Split(phoneNumber, ":")[0]
+					}
+				}
+			}
+
+			// Get push name (contact name)
+			if pushNameVal, ok := info["PushName"].(string); ok {
+				pushName = pushNameVal
+			}
+
+			// Check if it's a group message
+			if isGroupVal, ok := info["IsGroup"].(bool); ok {
+				isGroup = isGroupVal
+			}
+
+			// Skip group messages for now (Chatwoot typically handles 1-on-1 conversations)
+			if isGroup {
+				return nil
 			}
 
 			// Extract message content
@@ -1160,22 +1195,33 @@ func transformEventToChatwoot(eventData map[string]interface{}, accountID int, u
 				}
 			}
 
-			payload["content"] = messageText
-			payload["message_type"] = messageType
-			payload["source_id"] = sender
-			payload["inbox_id"] = accountID
-			
-			// Extract phone number from JID
-			if strings.Contains(sender, "@") {
-				phone := strings.Split(sender, "@")[0]
-				payload["phone_number"] = phone
+			// Chatwoot expects this format for incoming messages
+			// The source_id should be a unique identifier for the contact
+			// Using phone number as source_id (Chatwoot will create/find contact automatically)
+			payload := map[string]interface{}{
+				"content":      messageText,
+				"message_type": messageType,
+				"source_id":    phoneNumber, // This will be used to identify/create the contact
+				"inbox_id":     inboxID,
 			}
+
+			// Add phone_number if available (required for WhatsApp channel)
+			if phoneNumber != "" {
+				payload["phone_number"] = phoneNumber
+			}
+
+			// Add contact name if available
+			if pushName != "" {
+				payload["sender"] = map[string]interface{}{
+					"name":         pushName,
+					"phone_number": phoneNumber,
+				}
+			}
+
+			return payload
 		}
-	default:
-		// For other event types, send raw event data
-		payload["event"] = eventType
-		payload["data"] = eventData
 	}
 
-	return payload
+	// For other event types, return empty payload (Chatwoot only handles messages)
+	return nil
 }
