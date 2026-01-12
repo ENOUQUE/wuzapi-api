@@ -6524,6 +6524,13 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 			return
 		}
 
+		log.Info().
+			Str("userID", txtid).
+			Bool("enabled", t.Enabled).
+			Str("url", t.URL).
+			Int("inboxID", t.AccountID).
+			Msg("Chatwoot configuration saved successfully")
+
 		response := map[string]interface{}{
 			"Details": "Chatwoot configuration saved successfully",
 			"enabled": t.Enabled,
