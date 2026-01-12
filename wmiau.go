@@ -213,7 +213,7 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
 
 	// Send to Chatwoot if configured
-	go sendToChatwoot(postmap, mycli.userID, mycli.token)
+	go sendToChatwoot(postmap, mycli.userID, mycli.token, mycli.db)
 }
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {

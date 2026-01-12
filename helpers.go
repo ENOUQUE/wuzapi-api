@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
-	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -39,7 +38,6 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/jmoiron/sqlx"
 	"github.com/nfnt/resize"
 	"github.com/rs/zerolog/log"
 	"github.com/vincent-petithory/dataurl"
@@ -1126,14 +1124,10 @@ func transformEventToChatwoot(eventData map[string]interface{}, accountID int, u
 	switch eventType {
 	case "Message":
 		if info, ok := eventData["Info"].(map[string]interface{}); ok {
-			chat := ""
 			sender := ""
 			messageText := ""
 			messageType := "text"
 
-			if chatVal, ok := info["Chat"].(string); ok {
-				chat = chatVal
-			}
 			if senderVal, ok := info["Sender"].(string); ok {
 				sender = senderVal
 			}
@@ -1156,7 +1150,7 @@ func transformEventToChatwoot(eventData map[string]interface{}, accountID int, u
 					if caption, ok := videoMsg["caption"].(string); ok {
 						messageText = caption
 					}
-				} else if audioMsg, ok := message["audioMessage"].(map[string]interface{}); ok {
+				} else if _, ok := message["audioMessage"].(map[string]interface{}); ok {
 					messageType = "audio"
 				} else if documentMsg, ok := message["documentMessage"].(map[string]interface{}); ok {
 					messageType = "file"

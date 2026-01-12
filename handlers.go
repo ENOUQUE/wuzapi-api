@@ -6483,7 +6483,6 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		txtid := r.Context().Value("userinfo").(Values).Get("Id")
-		token := r.Context().Value("userinfo").(Values).Get("Token")
 
 		decoder := json.NewDecoder(r.Body)
 		var t chatwootConfigStruct
