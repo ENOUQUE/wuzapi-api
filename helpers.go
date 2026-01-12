@@ -1038,6 +1038,47 @@ func writeChunk(buf *bytes.Buffer, tag string, data []byte) {
 	}
 }
 
+// Test Chatwoot connection by validating token and inbox access
+func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) error {
+	client := resty.New()
+	client.SetTimeout(10 * time.Second)
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: false})
+
+	baseURL := strings.TrimSuffix(chatwootURL, "/")
+	
+	// Test inbox access
+	inboxURL := fmt.Sprintf("%s/public/api/v1/inboxes/%d", baseURL, inboxID)
+	
+	response, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("api_access_token", chatwootToken).
+		Get(inboxURL)
+
+	if err != nil {
+		return fmt.Errorf("failed to connect to Chatwoot: %v", err)
+	}
+
+	if response.StatusCode() == 401 {
+		return fmt.Errorf("invalid API token")
+	}
+
+	if response.StatusCode() == 404 {
+		return fmt.Errorf("inbox ID %d not found or access denied", inboxID)
+	}
+
+	if response.StatusCode() >= 400 {
+		return fmt.Errorf("Chatwoot returned error status %d: %s", response.StatusCode(), string(response.Body()))
+	}
+
+	log.Debug().
+		Str("url", chatwootURL).
+		Int("inboxID", inboxID).
+		Int("status", response.StatusCode()).
+		Msg("Chatwoot connection test successful")
+
+	return nil
+}
+
 // Send event to Chatwoot integration
 func sendToChatwoot(eventData map[string]interface{}, userID string, token string, db *sqlx.DB) {
 	if db == nil {
@@ -1147,7 +1188,18 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 	// Handle different event types
 	switch eventType {
 	case "Message":
-		if info, ok := eventData["Info"].(map[string]interface{}); ok {
+		// The event structure can be either:
+		// 1. { "event": { "Info": {...}, "Message": {...} }, "type": "Message" }
+		// 2. { "Info": {...}, "Message": {...}, "type": "Message" }
+		var eventObj map[string]interface{}
+		if evt, ok := eventData["event"].(map[string]interface{}); ok {
+			eventObj = evt
+		} else {
+			// Fallback: try direct access (for backward compatibility)
+			eventObj = eventData
+		}
+		
+		if info, ok := eventObj["Info"].(map[string]interface{}); ok {
 			sender := ""
 			messageText := ""
 			messageType := "text"
@@ -1184,11 +1236,15 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			}
 
 			// Extract message content
-			if message, ok := eventData["Message"].(map[string]interface{}); ok {
-				if textMsg, ok := message["conversation"].(string); ok {
+			messageFound := false
+			if message, ok := eventObj["Message"].(map[string]interface{}); ok {
+				messageFound = true
+				// Try conversation first (simple text)
+				if textMsg, ok := message["conversation"].(string); ok && textMsg != "" {
 					messageText = textMsg
 				} else if extendedTextMsg, ok := message["extendedTextMessage"].(map[string]interface{}); ok {
-					if text, ok := extendedTextMsg["text"].(string); ok {
+					// Extended text message (can include quoted messages)
+					if text, ok := extendedTextMsg["text"].(string); ok && text != "" {
 						messageText = text
 					}
 				} else if imageMsg, ok := message["imageMessage"].(map[string]interface{}); ok {
@@ -1203,30 +1259,47 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 					}
 				} else if _, ok := message["audioMessage"].(map[string]interface{}); ok {
 					messageType = "audio"
+					messageText = "[Áudio]"
 				} else if documentMsg, ok := message["documentMessage"].(map[string]interface{}); ok {
 					messageType = "file"
 					if fileName, ok := documentMsg["fileName"].(string); ok {
 						messageText = fileName
+					} else {
+						messageText = "[Documento]"
 					}
 				} else if buttonMsg, ok := message["buttonsMessage"].(map[string]interface{}); ok {
 					// Handle button messages (interactive buttons)
 					messageType = "text"
-					if contentText, ok := buttonMsg["contentText"].(string); ok {
+					if contentText, ok := buttonMsg["contentText"].(string); ok && contentText != "" {
 						messageText = contentText
-					} else if text, ok := buttonMsg["text"].(string); ok {
+					} else if text, ok := buttonMsg["text"].(string); ok && text != "" {
 						messageText = text
+					} else {
+						messageText = "[Mensagem com botões]"
 					}
-					// Note: Chatwoot will receive the text, buttons are handled separately
 				} else if listMsg, ok := message["listMessage"].(map[string]interface{}); ok {
 					// Handle list messages (interactive lists)
 					messageType = "text"
-					if description, ok := listMsg["description"].(string); ok {
+					if description, ok := listMsg["description"].(string); ok && description != "" {
 						messageText = description
-					} else if title, ok := listMsg["title"].(string); ok {
+					} else if title, ok := listMsg["title"].(string); ok && title != "" {
 						messageText = title
+					} else {
+						messageText = "[Mensagem com lista]"
 					}
-					// Note: Chatwoot will receive the text, list items are handled separately
 				}
+			}
+
+			// Skip if no message content found (e.g., senderKeyDistributionMessage)
+			if !messageFound || messageText == "" {
+				log.Debug().
+					Str("userID", userID).
+					Str("chatJID", chatJID).
+					Bool("isGroup", isGroup).
+					Bool("messageFound", messageFound).
+					Str("messageText", messageText).
+					Msg("Chatwoot integration skipped - no message content found")
+				return nil
 			}
 
 			// Chatwoot expects this format for incoming messages

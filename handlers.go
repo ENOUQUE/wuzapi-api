@@ -6506,6 +6506,18 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 				s.Respond(w, r, http.StatusBadRequest, errors.New("Chatwoot account ID is required when enabled"))
 				return
 			}
+
+			// Test Chatwoot connection
+			if err := testChatwootConnection(t.URL, t.Token, t.AccountID); err != nil {
+				log.Warn().
+					Err(err).
+					Str("userID", txtid).
+					Str("url", t.URL).
+					Int("inboxID", t.AccountID).
+					Msg("Chatwoot connection test failed")
+				s.Respond(w, r, http.StatusBadRequest, fmt.Errorf("failed to connect to Chatwoot: %v", err))
+				return
+			}
 		}
 
 		// Update database
@@ -6534,6 +6546,9 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 		response := map[string]interface{}{
 			"Details": "Chatwoot configuration saved successfully",
 			"enabled": t.Enabled,
+		}
+		if t.Enabled {
+			response["message"] = "Chatwoot connection verified successfully"
 		}
 		s.respondWithJSON(w, http.StatusOK, response)
 	}
