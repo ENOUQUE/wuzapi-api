@@ -1177,13 +1177,10 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				isGroup = isGroupVal
 			}
 
-			// Skip group messages for now (Chatwoot typically handles 1-on-1 conversations)
-			if isGroup {
-				log.Debug().
-					Str("userID", userID).
-					Str("sender", sender).
-					Msg("Chatwoot integration skipped - group message")
-				return nil
+			// Get chat JID (group or individual)
+			var chatJID string
+			if chatVal, ok := info["Chat"].(string); ok {
+				chatJID = chatVal
 			}
 
 			// Extract message content
@@ -1211,20 +1208,48 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 					if fileName, ok := documentMsg["fileName"].(string); ok {
 						messageText = fileName
 					}
+				} else if buttonMsg, ok := message["buttonsMessage"].(map[string]interface{}); ok {
+					// Handle button messages (interactive buttons)
+					messageType = "text"
+					if contentText, ok := buttonMsg["contentText"].(string); ok {
+						messageText = contentText
+					} else if text, ok := buttonMsg["text"].(string); ok {
+						messageText = text
+					}
+					// Note: Chatwoot will receive the text, buttons are handled separately
+				} else if listMsg, ok := message["listMessage"].(map[string]interface{}); ok {
+					// Handle list messages (interactive lists)
+					messageType = "text"
+					if description, ok := listMsg["description"].(string); ok {
+						messageText = description
+					} else if title, ok := listMsg["title"].(string); ok {
+						messageText = title
+					}
+					// Note: Chatwoot will receive the text, list items are handled separately
 				}
 			}
 
 			// Chatwoot expects this format for incoming messages
-			// The source_id should be a unique identifier for the contact
-			// Using phone number as source_id (Chatwoot will create/find contact automatically)
+			// For groups, use the group JID as source_id
+			// For individual messages, use phone number as source_id
+			var sourceID string
+			if isGroup && chatJID != "" {
+				// For groups, use the group JID (e.g., "120363420159035460@g.us")
+				sourceID = chatJID
+			} else {
+				// For individual messages, use phone number
+				sourceID = phoneNumber
+			}
+
 			payload := map[string]interface{}{
 				"content":      messageText,
 				"message_type": messageType,
-				"source_id":    phoneNumber, // This will be used to identify/create the contact
+				"source_id":    sourceID, // Group JID for groups, phone number for individuals
 				"inbox_id":     inboxID,
 			}
 
 			// Add phone_number if available (required for WhatsApp channel)
+			// For groups, this is the sender's phone number within the group
 			if phoneNumber != "" {
 				payload["phone_number"] = phoneNumber
 			}
@@ -1236,6 +1261,19 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 					"phone_number": phoneNumber,
 				}
 			}
+
+			// For groups, add group information
+			if isGroup && chatJID != "" {
+				payload["group_id"] = chatJID
+			}
+
+			log.Debug().
+				Str("userID", userID).
+				Bool("isGroup", isGroup).
+				Str("sourceID", sourceID).
+				Str("phoneNumber", phoneNumber).
+				Str("chatJID", chatJID).
+				Msg("Preparing Chatwoot payload")
 
 			return payload
 		}
