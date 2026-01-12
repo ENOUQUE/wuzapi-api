@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -1139,6 +1140,126 @@ func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) erro
 	return fmt.Errorf("unexpected response from Chatwoot: status %d", response.StatusCode())
 }
 
+// Create or get API Channel in Chatwoot
+// Returns the inbox identifier (channel identifier) and error
+func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID int, instanceName string) (int, error) {
+	client := resty.New()
+	client.SetTimeout(10 * time.Second)
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: false})
+
+	baseURL := strings.TrimSuffix(chatwootURL, "/")
+	
+	// First, try to list inboxes to see if API channel already exists
+	inboxesURL := fmt.Sprintf("%s/public/api/v1/inboxes", baseURL)
+	
+	response, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("api_access_token", chatwootToken).
+		Get(inboxesURL)
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to list inboxes: %v", err)
+	}
+
+	if response.StatusCode() == 401 {
+		return 0, fmt.Errorf("invalid API token")
+	}
+
+	// If we can list inboxes, check for API channel
+	if response.StatusCode() == 200 {
+		var inboxes []map[string]interface{}
+		if err := json.Unmarshal(response.Body(), &inboxes); err == nil {
+			// Look for API channel type
+			for _, inbox := range inboxes {
+				if channel, ok := inbox["channel"].(map[string]interface{}); ok {
+					if channelType, ok := channel["type"].(string); ok && channelType == "api" {
+						if id, ok := inbox["id"].(float64); ok {
+							log.Info().
+								Str("url", chatwootURL).
+								Int("inboxID", int(id)).
+								Msg("Found existing API Channel in Chatwoot")
+							return int(id), nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// API channel not found, create one using private API
+	// Note: This requires the API token to have proper permissions
+	createURL := fmt.Sprintf("%s/api/v1/accounts/%d/inboxes", baseURL, accountID)
+	
+	channelName := "WuzAPI Integration"
+	if instanceName != "" {
+		channelName = fmt.Sprintf("WuzAPI - %s", instanceName)
+	}
+	
+	payload := map[string]interface{}{
+		"name": channelName,
+		"channel": map[string]interface{}{
+			"type": "api",
+		},
+	}
+	
+	createResponse, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("api_access_token", chatwootToken).
+		SetBody(payload).
+		Post(createURL)
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to create API channel: %v", err)
+	}
+
+	if createResponse.StatusCode() == 401 {
+		return 0, fmt.Errorf("invalid API token (insufficient permissions to create channel)")
+	}
+
+	if createResponse.StatusCode() >= 400 {
+		// If creation fails, try to use account_id as inbox_id (fallback)
+		log.Warn().
+			Str("url", chatwootURL).
+			Int("accountID", accountID).
+			Int("status", createResponse.StatusCode()).
+			Str("response", string(createResponse.Body())).
+			Msg("Failed to create API channel, will use account_id as inbox_id")
+		return accountID, nil
+	}
+
+	// Parse response to get the created inbox ID
+	var createResult map[string]interface{}
+	if err := json.Unmarshal(createResponse.Body(), &createResult); err == nil {
+		if id, ok := createResult["id"].(float64); ok {
+			log.Info().
+				Str("url", chatwootURL).
+				Int("inboxID", int(id)).
+				Msg("Created new API Channel in Chatwoot")
+			return int(id), nil
+		}
+		// Try to get identifier from channel
+		if channel, ok := createResult["channel"].(map[string]interface{}); ok {
+			if identifier, ok := channel["identifier"].(string); ok {
+				// Convert identifier to int if possible
+				if id, err := strconv.Atoi(identifier); err == nil {
+					log.Info().
+						Str("url", chatwootURL).
+						Int("inboxID", id).
+						Msg("Created new API Channel in Chatwoot (using identifier)")
+					return id, nil
+				}
+			}
+		}
+	}
+
+	// If we can't parse the response, use account_id as fallback
+	log.Warn().
+		Str("url", chatwootURL).
+		Int("accountID", accountID).
+		Msg("Could not parse created channel response, using account_id as inbox_id")
+	return accountID, nil
+}
+
 // Send event to Chatwoot integration
 func sendToChatwoot(eventData map[string]interface{}, userID string, token string, db *sqlx.DB) {
 	if db == nil {
@@ -1234,24 +1355,42 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 	}
 
 	// Parse response to get Chatwoot IDs (similar to Evolution API)
+	// Evolution API captures: chatwootMessageId, chatwootInboxId, chatwootConversationId
 	var chatwootResponse map[string]interface{}
 	if err := json.Unmarshal(response.Body(), &chatwootResponse); err == nil {
-		if messageID, ok := chatwootResponse["id"].(float64); ok {
-			log.Debug().
-				Str("userID", userID).
-				Str("eventType", eventData["type"].(string)).
-				Int("inboxID", inboxID).
-				Int("status", response.StatusCode()).
-				Int("chatwootMessageId", int(messageID)).
-				Msg("Event sent to Chatwoot successfully")
+		var chatwootMessageID, chatwootConversationID int
+		
+		// Extract message ID
+		if id, ok := chatwootResponse["id"].(float64); ok {
+			chatwootMessageID = int(id)
 		}
+		
+		// Extract conversation ID (may be in conversation object or directly in response)
+		if convID, ok := chatwootResponse["conversation_id"].(float64); ok {
+			chatwootConversationID = int(convID)
+		} else if conversation, ok := chatwootResponse["conversation"].(map[string]interface{}); ok {
+			if convID, ok := conversation["id"].(float64); ok {
+				chatwootConversationID = int(convID)
+			}
+		}
+		
+		// Log all Chatwoot IDs (similar to Evolution API format)
+		log.Info().
+			Str("userID", userID).
+			Str("eventType", eventData["type"].(string)).
+			Int("inboxID", inboxID).
+			Int("status", response.StatusCode()).
+			Int("chatwootMessageId", chatwootMessageID).
+			Int("chatwootInboxId", inboxID).
+			Int("chatwootConversationId", chatwootConversationID).
+			Msg("Event sent to Chatwoot successfully")
 	} else {
 		log.Debug().
 			Str("userID", userID).
 			Str("eventType", eventData["type"].(string)).
 			Int("inboxID", inboxID).
 			Int("status", response.StatusCode()).
-			Msg("Event sent to Chatwoot successfully")
+			Msg("Event sent to Chatwoot successfully (response parsing failed)")
 	}
 }
 
@@ -1283,7 +1422,20 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 
 			if senderVal, ok := info["Sender"].(string); ok {
 				sender = senderVal
-				// Extract phone number from JID
+			}
+			
+			// Extract phone number - prefer SenderAlt for groups (has the actual WhatsApp number)
+			if senderAltVal, ok := info["SenderAlt"].(string); ok && senderAltVal != "" {
+				// SenderAlt is in format like "556286410226:37@s.whatsapp.net"
+				if strings.Contains(senderAltVal, "@") {
+					phoneNumber = strings.Split(senderAltVal, "@")[0]
+					// Remove device ID suffix like "556286410226:37" -> "556286410226"
+					if strings.Contains(phoneNumber, ":") {
+						phoneNumber = strings.Split(phoneNumber, ":")[0]
+					}
+				}
+			} else if sender != "" {
+				// Fallback to Sender if SenderAlt not available
 				if strings.Contains(sender, "@") {
 					phoneNumber = strings.Split(sender, "@")[0]
 					// Remove any prefix like "5516991643913:49" -> "5516991643913"

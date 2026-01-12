@@ -6502,22 +6502,38 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 				s.Respond(w, r, http.StatusBadRequest, errors.New("Chatwoot token is required when enabled"))
 				return
 			}
+			
+			// Use account_id 1 as default if not provided
 			if t.AccountID == 0 {
-				s.Respond(w, r, http.StatusBadRequest, errors.New("Chatwoot account ID is required when enabled"))
-				return
+				t.AccountID = 1
 			}
-
-			// Test Chatwoot connection
-			if err := testChatwootConnection(t.URL, t.Token, t.AccountID); err != nil {
+			
+			// Get user name for channel naming
+			userInfo := r.Context().Value("userinfo").(Values)
+			instanceName := userInfo.Get("Name")
+			
+			// Create or get API Channel automatically
+			inboxID, err := createOrGetChatwootAPIChannel(t.URL, t.Token, t.AccountID, instanceName)
+			if err != nil {
 				log.Warn().
 					Err(err).
 					Str("userID", txtid).
 					Str("url", t.URL).
-					Int("inboxID", t.AccountID).
-					Msg("Chatwoot connection test failed")
-				s.Respond(w, r, http.StatusBadRequest, fmt.Errorf("failed to connect to Chatwoot: %v", err))
+					Int("accountID", t.AccountID).
+					Msg("Failed to create/get Chatwoot API Channel")
+				s.Respond(w, r, http.StatusBadRequest, fmt.Errorf("failed to create Chatwoot API Channel: %v", err))
 				return
 			}
+			
+			// Update account_id with the actual inbox ID
+			t.AccountID = inboxID
+			
+			log.Info().
+				Str("userID", txtid).
+				Str("url", t.URL).
+				Int("accountID", t.AccountID).
+				Int("inboxID", inboxID).
+				Msg("Chatwoot API Channel created/retrieved successfully")
 		}
 
 		// Update database
