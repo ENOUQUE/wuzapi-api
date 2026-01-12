@@ -1063,15 +1063,30 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 		return
 	}
 
-	if !enabled || chatwootURL == "" || chatwootToken == "" || inboxID == 0 {
+	if !enabled {
+		log.Debug().Str("userID", userID).Msg("Chatwoot integration disabled")
+		return
+	}
+
+	if chatwootURL == "" || chatwootToken == "" || inboxID == 0 {
+		log.Debug().
+			Str("userID", userID).
+			Bool("hasURL", chatwootURL != "").
+			Bool("hasToken", chatwootToken != "").
+			Int("inboxID", inboxID).
+			Msg("Chatwoot integration skipped - missing configuration")
 		return
 	}
 
 	// Transform event to Chatwoot format
-	chatwootPayload := transformEventToChatwoot(eventData, inboxID)
+	chatwootPayload := transformEventToChatwoot(eventData, inboxID, userID)
 	
 	// Skip if payload is nil (event type not supported)
 	if chatwootPayload == nil {
+		log.Debug().
+			Str("userID", userID).
+			Str("eventType", eventData["type"].(string)).
+			Msg("Chatwoot integration skipped - payload is nil (unsupported event type or filtered)")
 		return
 	}
 
@@ -1126,7 +1141,7 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 }
 
 // Transform WhatsApp event to Chatwoot format
-func transformEventToChatwoot(eventData map[string]interface{}, inboxID int) map[string]interface{} {
+func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, userID string) map[string]interface{} {
 	eventType, _ := eventData["type"].(string)
 	
 	// Handle different event types
@@ -1164,6 +1179,10 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int) map
 
 			// Skip group messages for now (Chatwoot typically handles 1-on-1 conversations)
 			if isGroup {
+				log.Debug().
+					Str("userID", userID).
+					Str("sender", sender).
+					Msg("Chatwoot integration skipped - group message")
 				return nil
 			}
 
