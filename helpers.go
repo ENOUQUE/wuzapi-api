@@ -1468,6 +1468,12 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				}
 			}
 
+			// Get chat JID (group or individual) - declare early
+			var chatJID string
+			if chatVal, ok := info["Chat"].(string); ok {
+				chatJID = chatVal
+			}
+
 			// Get push name (contact name)
 			if pushNameVal, ok := info["PushName"].(string); ok {
 				pushName = pushNameVal
@@ -1476,12 +1482,6 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			// Check if it's a group message
 			if isGroupVal, ok := info["IsGroup"].(bool); ok {
 				isGroup = isGroupVal
-			}
-
-			// Get chat JID (group or individual)
-			var chatJID string
-			if chatVal, ok := info["Chat"].(string); ok {
-				chatJID = chatVal
 			}
 
 			// Extract message content
