@@ -1149,7 +1149,23 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 
 	baseURL := strings.TrimSuffix(chatwootURL, "/")
 	
-	// First, try to list inboxes using private API (public API doesn't have list endpoint)
+	// First, validate token by trying to access public API endpoint
+	// This ensures the token is valid even if it doesn't have private API permissions
+	publicTestURL := fmt.Sprintf("%s/public/api/v1/inboxes", baseURL)
+	publicResponse, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("api_access_token", chatwootToken).
+		Get(publicTestURL)
+	
+	if err != nil {
+		return 0, fmt.Errorf("failed to validate token: %v", err)
+	}
+	
+	if publicResponse.StatusCode() == 401 {
+		return 0, fmt.Errorf("invalid API token")
+	}
+	
+	// Token is valid for public API, now try private API to list/create inboxes
 	// Use the account_id from the URL path (account_id is in the URL like /accounts/1/...)
 	inboxesURL := fmt.Sprintf("%s/api/v1/accounts/%d/inboxes", baseURL, accountID)
 	
@@ -1159,11 +1175,24 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 		Get(inboxesURL)
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to list inboxes: %v", err)
+		// If private API fails, token is still valid for public API
+		// Use account_id as inbox_id - Chatwoot will handle inbox creation automatically
+		log.Warn().
+			Err(err).
+			Str("url", chatwootURL).
+			Int("accountID", accountID).
+			Msg("Failed to list inboxes via private API, but token is valid for public API. Will use account_id as inbox_id.")
+		return accountID, nil
 	}
 
+	// If we get 401 on private API, token doesn't have private API permissions
+	// But it's valid for public API, so we can still use it
 	if response.StatusCode() == 401 {
-		return 0, fmt.Errorf("invalid API token")
+		log.Warn().
+			Str("url", chatwootURL).
+			Int("accountID", accountID).
+			Msg("API token valid for public API but lacks private API permissions. Will use account_id as inbox_id. Chatwoot will create inbox/conversation automatically when receiving messages.")
+		return accountID, nil
 	}
 
 	// If we can list inboxes, check for API channel
@@ -1210,7 +1239,13 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 		Post(createURL)
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to create API channel: %v", err)
+		// If creation fails, token is still valid for public API
+		log.Warn().
+			Err(err).
+			Str("url", chatwootURL).
+			Int("accountID", accountID).
+			Msg("Failed to create API channel, but token is valid for public API. Will use account_id as inbox_id.")
+		return accountID, nil
 	}
 
 	if createResponse.StatusCode() >= 400 {

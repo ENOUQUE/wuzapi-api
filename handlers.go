@@ -6716,11 +6716,21 @@ func (s *server) ChatwootWebhook() http.HandlerFunc {
 		}
 
 		// Only process outgoing messages from agents (not contacts)
-		messageType, _ := messageData["message_type"].(string)
+		// Chatwoot sends message_type as number: 0 = incoming, 1 = outgoing
+		var messageType interface{}
+		messageType, _ = messageData["message_type"]
+		isOutgoing := false
+		
+		if msgTypeStr, ok := messageType.(string); ok {
+			isOutgoing = (msgTypeStr == "outgoing" || msgTypeStr == "1")
+		} else if msgTypeNum, ok := messageType.(float64); ok {
+			isOutgoing = (msgTypeNum == 1) // 1 = outgoing
+		}
+		
 		sender, _ := messageData["sender"].(map[string]interface{})
 		senderType, _ := sender["type"].(string)
 
-		if messageType != "outgoing" || senderType != "user" {
+		if !isOutgoing || senderType != "user" {
 			// Not an outgoing message from an agent, ignore
 			s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
 				"status": "ignored",
@@ -6749,22 +6759,45 @@ func (s *server) ChatwootWebhook() http.HandlerFunc {
 			return
 		}
 
-		// Try to get contact identifier from conversation meta
+		// Try multiple methods to get phone number (like Evolution API)
 		var phoneNumber string
+		
+		// Method 1: Try to get from conversation meta.sender.identifier
 		if meta, ok := conversation["meta"].(map[string]interface{}); ok {
 			if sender, ok := meta["sender"].(map[string]interface{}); ok {
 				if identifier, ok := sender["identifier"].(string); ok {
 					phoneNumber = identifier
 				}
+				// Also try phone_number field
+				if phoneNumber == "" {
+					if phoneNum, ok := sender["phone_number"].(string); ok {
+						phoneNumber = phoneNum
+					}
+				}
 			}
 		}
 
-		// Fallback: try to get from conversation contact
+		// Method 2: Try to get from conversation contact
 		if phoneNumber == "" {
 			if contact, ok := conversation["contact"].(map[string]interface{}); ok {
 				if identifier, ok := contact["identifier"].(string); ok {
 					phoneNumber = identifier
 				}
+				// Also try phone_number field
+				if phoneNumber == "" {
+					if phoneNum, ok := contact["phone_number"].(string); ok {
+						phoneNumber = phoneNum
+					}
+				}
+			}
+		}
+		
+		// Method 3: Try to get from message source_id (format: WAID:xxx or just number)
+		if phoneNumber == "" {
+			if sourceID, ok := messageData["source_id"].(string); ok {
+				// Remove WAID: prefix if present
+				phoneNumber = strings.TrimPrefix(sourceID, "WAID:")
+				phoneNumber = strings.TrimSpace(phoneNumber)
 			}
 		}
 
