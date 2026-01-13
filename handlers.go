@@ -6517,14 +6517,32 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 			webhookBaseURL := os.Getenv("WUZAPI_WEBHOOK_BASE_URL")
 			if webhookBaseURL == "" {
 				// Try to construct from request
-				scheme := "https"
-				if r.TLS == nil {
-					scheme = "http"
-				}
 				host := r.Host
 				if host == "" {
 					host = "wuzapi.previas.shop" // Default fallback
 				}
+				
+				// Determine scheme: prefer https for production domains
+				scheme := "https"
+				// Check X-Forwarded-Proto header first (for reverse proxies)
+				if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+					if proto == "https" {
+						scheme = "https"
+					} else if proto == "http" && (host == "localhost" || strings.HasPrefix(host, "127.0.0.1") || strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.")) {
+						// Only allow http for local/private IPs
+						scheme = "http"
+					}
+				} else if r.TLS == nil {
+					// Only use http if not behind a proxy, no TLS, and local/private IP
+					if host == "localhost" || strings.HasPrefix(host, "127.0.0.1") || strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") {
+						scheme = "http"
+					}
+				}
+				// For production domains (like .previas.shop, .com, etc.), always use https
+				if strings.Contains(host, ".") && !strings.HasPrefix(host, "localhost") && !strings.HasPrefix(host, "127.0.0.1") && !strings.HasPrefix(host, "192.168.") && !strings.HasPrefix(host, "10.") {
+					scheme = "https"
+				}
+				
 				webhookBaseURL = fmt.Sprintf("%s://%s", scheme, host)
 			}
 			

@@ -1151,25 +1151,9 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 
 	baseURL := strings.TrimSuffix(chatwootURL, "/")
 	
-	// First, validate token by trying to access public API endpoint
-	// This ensures the token is valid even if it doesn't have private API permissions
-	publicTestURL := fmt.Sprintf("%s/public/api/v1/inboxes", baseURL)
-	publicResponse, err := client.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("api_access_token", chatwootToken).
-		Get(publicTestURL)
-	
-	if err != nil {
-		return 0, fmt.Errorf("failed to validate token: %v", err)
-	}
-	
-	if publicResponse.StatusCode() == 401 {
-		return 0, fmt.Errorf("invalid API token")
-	}
-	
-	// Token is valid for public API
-	// Now try private API to list/create inboxes (optional - requires permissions)
+	// Try private API to list/create inboxes
 	// Use the account_id provided by user (e.g., 1 from /app/accounts/1)
+	// If this fails with 401, the token may still be valid for public API (sending messages)
 	inboxesURL := fmt.Sprintf("%s/api/v1/accounts/%d/inboxes", baseURL, accountID)
 	
 	response, err := client.R().
@@ -1460,9 +1444,10 @@ func sendToChatwoot(eventData map[string]interface{}, userID string, token strin
 	
 	// Log payload for debugging
 	payloadJSON, _ := json.Marshal(chatwootPayload)
-	log.Debug().
+	log.Info().
 		Str("userID", userID).
 		Str("url", messageURL).
+		Int("inboxID", inboxID).
 		Str("payload", string(payloadJSON)).
 		Msg("Sending event to Chatwoot")
 	
@@ -1554,6 +1539,7 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			var pushName string
 			var isGroup bool
 			var chatJID string
+			var isFromMe bool
 
 			if senderVal, ok := info["Sender"].(string); ok {
 				sender = senderVal
@@ -1567,6 +1553,21 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			// Check if it's a group message
 			if isGroupVal, ok := info["IsGroup"].(bool); ok {
 				isGroup = isGroupVal
+			}
+			
+			// Check if message is from me (sent by the user)
+			if isFromMeVal, ok := info["IsFromMe"].(bool); ok {
+				isFromMe = isFromMeVal
+			}
+			
+			// Skip messages sent by the user (IsFromMe: true) for individual chats
+			// For groups, we can process all messages (both sent and received)
+			if isFromMe && !isGroup {
+				log.Debug().
+					Str("userID", userID).
+					Str("chatJID", chatJID).
+					Msg("Chatwoot integration skipped - message sent by user (IsFromMe: true)")
+				return nil
 			}
 
 			// Get push name (contact name)
