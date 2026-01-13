@@ -1212,18 +1212,22 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 		return 0, fmt.Errorf("failed to create API channel: %v", err)
 	}
 
-	if createResponse.StatusCode() == 401 {
-		return 0, fmt.Errorf("invalid API token (insufficient permissions to create channel)")
-	}
-
 	if createResponse.StatusCode() >= 400 {
-		// If creation fails, try to use account_id as inbox_id (fallback)
-		log.Warn().
-			Str("url", chatwootURL).
-			Int("accountID", accountID).
-			Int("status", createResponse.StatusCode()).
-			Str("response", string(createResponse.Body())).
-			Msg("Failed to create API channel, will use account_id as inbox_id")
+		// If creation fails (401 = no permission, 404 = not found, etc.), use account_id as inbox_id (fallback)
+		// This is OK because Chatwoot may create the inbox/conversation automatically when receiving messages
+		if createResponse.StatusCode() == 401 {
+			log.Warn().
+				Str("url", chatwootURL).
+				Int("accountID", accountID).
+				Msg("API token lacks permissions to create channel (401). Will use account_id as inbox_id. Chatwoot will create inbox/conversation automatically when receiving messages.")
+		} else {
+			log.Warn().
+				Str("url", chatwootURL).
+				Int("accountID", accountID).
+				Int("status", createResponse.StatusCode()).
+				Str("response", string(createResponse.Body())).
+				Msg("Failed to create API channel, will use account_id as inbox_id (Chatwoot will create automatically when receiving messages)")
+		}
 		return accountID, nil
 	}
 

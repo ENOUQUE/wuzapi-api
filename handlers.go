@@ -6647,8 +6647,197 @@ func (s *server) DeleteChatwootConfig() http.HandlerFunc {
 			return
 		}
 
+	s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"Details": "Chatwoot configuration deleted successfully",
+	})
+}
+}
+
+// Receive webhook from Chatwoot and process outgoing messages
+func (s *server) ChatwootWebhook() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get token from query parameter or header
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			token = r.Header.Get("token")
+		}
+
+		if token == "" {
+			s.respondWithJSON(w, http.StatusUnauthorized, map[string]interface{}{
+				"error": "token required (query parameter or header)",
+			})
+			return
+		}
+
+		// Get user ID from token
+		var userID string
+		myuserinfo, found := userinfocache.Get(token)
+		if !found {
+			// Try to get from database
+			err := s.db.QueryRow("SELECT id FROM users WHERE token=$1 LIMIT 1", token).Scan(&userID)
+			if err != nil {
+				s.respondWithJSON(w, http.StatusUnauthorized, map[string]interface{}{
+					"error": "invalid token",
+				})
+				return
+			}
+		} else {
+			userID = myuserinfo.(Values).Get("Id")
+		}
+
+		if userID == "" {
+			s.respondWithJSON(w, http.StatusUnauthorized, map[string]interface{}{
+				"error": "user not found",
+			})
+			return
+		}
+
+		// Parse webhook payload from Chatwoot
+		var payload map[string]interface{}
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&payload); err != nil {
+			log.Error().Err(err).Str("userID", userID).Msg("Failed to decode Chatwoot webhook payload")
+			s.respondWithJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"error": "invalid JSON payload",
+			})
+			return
+		}
+
+		// Process only message_created events with outgoing messages from agents
+		event, ok := payload["event"].(string)
+		if !ok || event != "message_created" {
+			// Not a message event, acknowledge but don't process
+			s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+				"status": "ignored",
+				"reason": "not a message_created event",
+			})
+			return
+		}
+
+		messageData, ok := payload["message"].(map[string]interface{})
+		if !ok {
+			s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+				"status": "ignored",
+				"reason": "invalid message data",
+			})
+			return
+		}
+
+		// Only process outgoing messages from agents (not contacts)
+		messageType, _ := messageData["message_type"].(string)
+		sender, _ := messageData["sender"].(map[string]interface{})
+		senderType, _ := sender["type"].(string)
+
+		if messageType != "outgoing" || senderType != "user" {
+			// Not an outgoing message from an agent, ignore
+			s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+				"status": "ignored",
+				"reason": "not an outgoing message from agent",
+			})
+			return
+		}
+
+		// Get message content
+		content, _ := messageData["content"].(string)
+		if content == "" {
+			s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+				"status": "ignored",
+				"reason": "empty message content",
+			})
+			return
+		}
+
+		// Get conversation to find contact identifier
+		conversation, ok := messageData["conversation"].(map[string]interface{})
+		if !ok {
+			s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+				"status": "ignored",
+				"reason": "conversation data not found",
+			})
+			return
+		}
+
+		// Try to get contact identifier from conversation meta
+		var phoneNumber string
+		if meta, ok := conversation["meta"].(map[string]interface{}); ok {
+			if sender, ok := meta["sender"].(map[string]interface{}); ok {
+				if identifier, ok := sender["identifier"].(string); ok {
+					phoneNumber = identifier
+				}
+			}
+		}
+
+		// Fallback: try to get from conversation contact
+		if phoneNumber == "" {
+			if contact, ok := conversation["contact"].(map[string]interface{}); ok {
+				if identifier, ok := contact["identifier"].(string); ok {
+					phoneNumber = identifier
+				}
+			}
+		}
+
+		if phoneNumber == "" {
+			log.Warn().Str("userID", userID).Msg("Could not find phone number in Chatwoot webhook")
+			s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
+				"status": "ignored",
+				"reason": "phone number not found in conversation",
+			})
+			return
+		}
+
+		// Clean phone number (remove non-numeric characters except +)
+		phoneNumber = strings.TrimSpace(phoneNumber)
+		phoneNumber = strings.TrimPrefix(phoneNumber, "+")
+		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, "(", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, ")", "")
+
+		// Get WhatsApp client
+		client := clientManager.GetWhatsmeowClient(userID)
+		if client == nil {
+			log.Error().Str("userID", userID).Msg("WhatsApp client not found for user")
+			s.respondWithJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error": "WhatsApp session not active",
+			})
+			return
+		}
+
+		// Parse JID
+		recipient, err := validateMessageFields(phoneNumber, nil, nil)
+		if err != nil {
+			log.Error().Err(err).Str("userID", userID).Str("phone", phoneNumber).Msg("Invalid phone number")
+			s.respondWithJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"error": fmt.Sprintf("invalid phone number: %v", err),
+			})
+			return
+		}
+
+		// Create WhatsApp message
+		msgid := client.GenerateMessageID()
+		msg := &waE2E.Message{
+			Conversation: proto.String(content),
+		}
+
+		// Send message
+		_, err = client.SendMessage(context.Background(), recipient, msg, whatsmeow.SendRequestExtra{ID: msgid})
+		if err != nil {
+			log.Error().Err(err).Str("userID", userID).Str("phone", phoneNumber).Msg("Failed to send message to WhatsApp")
+			s.respondWithJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error": fmt.Sprintf("failed to send message: %v", err),
+			})
+			return
+		}
+
+		log.Info().
+			Str("userID", userID).
+			Str("phone", phoneNumber).
+			Str("messageID", msgid).
+			Msg("Message sent to WhatsApp from Chatwoot webhook")
+
 		s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
-			"Details": "Chatwoot configuration deleted successfully",
+			"status":    "success",
+			"messageID": msgid,
 		})
 	}
 }
