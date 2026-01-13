@@ -6513,9 +6513,24 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 			userInfo := r.Context().Value("userinfo").(Values)
 			instanceName := userInfo.Get("Name")
 			
+			// Get webhook base URL from request (use https by default for security)
+			webhookBaseURL := os.Getenv("WUZAPI_WEBHOOK_BASE_URL")
+			if webhookBaseURL == "" {
+				// Try to construct from request
+				scheme := "https"
+				if r.TLS == nil {
+					scheme = "http"
+				}
+				host := r.Host
+				if host == "" {
+					host = "wuzapi.previas.shop" // Default fallback
+				}
+				webhookBaseURL = fmt.Sprintf("%s://%s", scheme, host)
+			}
+			
 			// Try to create or get API Channel automatically (optional - may not have permissions)
 			// If it fails, we'll use account_id as inbox_id (which is correct)
-			inboxID, err := createOrGetChatwootAPIChannel(t.URL, t.Token, t.AccountID, instanceName)
+			inboxID, err := createOrGetChatwootAPIChannel(t.URL, t.Token, t.AccountID, instanceName, webhookBaseURL)
 			if err != nil {
 				// Only fail if token is invalid - otherwise use account_id
 				if strings.Contains(err.Error(), "invalid API token") {

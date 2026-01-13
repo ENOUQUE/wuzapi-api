@@ -1143,7 +1143,8 @@ func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) erro
 // Create or get API Channel in Chatwoot
 // Returns the inbox identifier (channel identifier) and error
 // Note: accountID should be the Chatwoot account ID (e.g., 1 from /app/accounts/1)
-func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID int, instanceName string) (int, error) {
+// webhookBaseURL is the base URL for webhooks (e.g., https://wuzapi.previas.shop)
+func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID int, instanceName string, webhookBaseURL string) (int, error) {
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: false})
@@ -1207,11 +1208,28 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 				if channel, ok := inbox["channel"].(map[string]interface{}); ok {
 					if channelType, ok := channel["type"].(string); ok && channelType == "api" {
 						if id, ok := inbox["id"].(float64); ok {
+							foundInboxID := int(id)
 							log.Info().
 								Str("url", chatwootURL).
-								Int("inboxID", int(id)).
+								Int("inboxID", foundInboxID).
 								Msg("Found existing API Channel in Chatwoot")
-							return int(id), nil
+							
+							// Configure webhook URL for existing inbox
+							if webhookBaseURL != "" && instanceName != "" {
+								webhookURL := fmt.Sprintf("%s/webhook/chatwoot/%s", strings.TrimSuffix(webhookBaseURL, "/"), instanceName)
+								err := configureChatwootInboxWebhook(chatwootURL, chatwootToken, accountID, foundInboxID, webhookURL)
+								if err != nil {
+									// Log warning but don't fail - webhook can be configured manually
+									log.Warn().
+										Err(err).
+										Str("url", chatwootURL).
+										Int("inboxID", foundInboxID).
+										Str("webhookURL", webhookURL).
+										Msg("Failed to configure inbox webhook automatically (can be configured manually in Chatwoot)")
+								}
+							}
+							
+							return foundInboxID, nil
 						}
 					}
 				}
@@ -1271,28 +1289,46 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 	}
 
 	// Parse response to get the created inbox ID
+	var createdInboxID int
 	var createResult map[string]interface{}
 	if err := json.Unmarshal(createResponse.Body(), &createResult); err == nil {
 		if id, ok := createResult["id"].(float64); ok {
+			createdInboxID = int(id)
 			log.Info().
 				Str("url", chatwootURL).
-				Int("inboxID", int(id)).
+				Int("inboxID", createdInboxID).
 				Msg("Created new API Channel in Chatwoot")
-			return int(id), nil
-		}
-		// Try to get identifier from channel
-		if channel, ok := createResult["channel"].(map[string]interface{}); ok {
+		} else if channel, ok := createResult["channel"].(map[string]interface{}); ok {
+			// Try to get identifier from channel
 			if identifier, ok := channel["identifier"].(string); ok {
 				// Convert identifier to int if possible
 				if id, err := strconv.Atoi(identifier); err == nil {
+					createdInboxID = id
 					log.Info().
 						Str("url", chatwootURL).
-						Int("inboxID", id).
+						Int("inboxID", createdInboxID).
 						Msg("Created new API Channel in Chatwoot (using identifier)")
-					return id, nil
 				}
 			}
 		}
+	}
+
+	if createdInboxID > 0 {
+		// Configure webhook URL for the created inbox
+		if webhookBaseURL != "" && instanceName != "" {
+			webhookURL := fmt.Sprintf("%s/webhook/chatwoot/%s", strings.TrimSuffix(webhookBaseURL, "/"), instanceName)
+			err := configureChatwootInboxWebhook(chatwootURL, chatwootToken, accountID, createdInboxID, webhookURL)
+			if err != nil {
+				// Log warning but don't fail - webhook can be configured manually
+				log.Warn().
+					Err(err).
+					Str("url", chatwootURL).
+					Int("inboxID", createdInboxID).
+					Str("webhookURL", webhookURL).
+					Msg("Failed to configure inbox webhook automatically (can be configured manually in Chatwoot)")
+			}
+		}
+		return createdInboxID, nil
 	}
 
 	// If we can't parse the response, use account_id as fallback
@@ -1301,6 +1337,61 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 		Int("accountID", accountID).
 		Msg("Could not parse created channel response, using account_id as inbox_id")
 	return accountID, nil
+}
+
+// Configure Chatwoot inbox webhook URL
+// Sets the webhook URL for the inbox to receive events from Chatwoot
+func configureChatwootInboxWebhook(chatwootURL, chatwootToken string, accountID, inboxID int, webhookURL string) error {
+	client := resty.New()
+	client.SetTimeout(10 * time.Second)
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: false})
+
+	baseURL := strings.TrimSuffix(chatwootURL, "/")
+	
+	// Update inbox webhook URL using private API
+	// Endpoint: PUT /api/v1/accounts/{account_id}/inboxes/{inbox_id}
+	updateURL := fmt.Sprintf("%s/api/v1/accounts/%d/inboxes/%d", baseURL, accountID, inboxID)
+	
+	payload := map[string]interface{}{
+		"webhook_url": webhookURL,
+	}
+	
+	response, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("api_access_token", chatwootToken).
+		SetBody(payload).
+		Put(updateURL)
+
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Str("url", chatwootURL).
+			Int("accountID", accountID).
+			Int("inboxID", inboxID).
+			Str("webhookURL", webhookURL).
+			Msg("Failed to configure inbox webhook (token may not have permissions)")
+		return err
+	}
+
+	if response.StatusCode() >= 400 {
+		log.Warn().
+			Str("url", chatwootURL).
+			Int("accountID", accountID).
+			Int("inboxID", inboxID).
+			Str("webhookURL", webhookURL).
+			Int("status", response.StatusCode()).
+			Str("response", string(response.Body())).
+			Msg("Failed to configure inbox webhook (token may not have permissions)")
+		return fmt.Errorf("failed to configure webhook: status %d", response.StatusCode())
+	}
+
+	log.Info().
+		Str("url", chatwootURL).
+		Int("accountID", accountID).
+		Int("inboxID", inboxID).
+		Str("webhookURL", webhookURL).
+		Msg("Successfully configured Chatwoot inbox webhook")
+	return nil
 }
 
 // Send event to Chatwoot integration
