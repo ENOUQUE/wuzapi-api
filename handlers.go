@@ -6656,37 +6656,29 @@ func (s *server) DeleteChatwootConfig() http.HandlerFunc {
 // Receive webhook from Chatwoot and process outgoing messages
 func (s *server) ChatwootWebhook() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get token from query parameter or header
-		token := r.URL.Query().Get("token")
-		if token == "" {
-			token = r.Header.Get("token")
-		}
-
-		if token == "" {
-			s.respondWithJSON(w, http.StatusUnauthorized, map[string]interface{}{
-				"error": "token required (query parameter or header)",
+		// Get instance name from URL path (like Evolution API: /webhook/chatwoot/{instanceName})
+		vars := mux.Vars(r)
+		instanceName, ok := vars["instanceName"]
+		if !ok || instanceName == "" {
+			s.respondWithJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"error": "instance name required in path",
 			})
 			return
 		}
 
-		// Get user ID from token
+		// Get user ID from instance name (name field in database)
 		var userID string
-		myuserinfo, found := userinfocache.Get(token)
-		if !found {
-			// Try to get from database
-			err := s.db.QueryRow("SELECT id FROM users WHERE token=$1 LIMIT 1", token).Scan(&userID)
-			if err != nil {
-				s.respondWithJSON(w, http.StatusUnauthorized, map[string]interface{}{
-					"error": "invalid token",
-				})
-				return
-			}
-		} else {
-			userID = myuserinfo.(Values).Get("Id")
+		err := s.db.QueryRow("SELECT id FROM users WHERE name=$1 LIMIT 1", instanceName).Scan(&userID)
+		if err != nil {
+			log.Warn().Err(err).Str("instanceName", instanceName).Msg("Instance not found by name")
+			s.respondWithJSON(w, http.StatusNotFound, map[string]interface{}{
+				"error": "instance not found",
+			})
+			return
 		}
 
 		if userID == "" {
-			s.respondWithJSON(w, http.StatusUnauthorized, map[string]interface{}{
+			s.respondWithJSON(w, http.StatusNotFound, map[string]interface{}{
 				"error": "user not found",
 			})
 			return

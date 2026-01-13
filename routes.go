@@ -145,7 +145,7 @@ func (s *server) routes() {
 	s.router.Handle("/session/chatwoot/config", c.Then(s.ConfigureChatwoot())).Methods("POST")
 	s.router.Handle("/session/chatwoot/config", c.Then(s.GetChatwootConfig())).Methods("GET")
 	s.router.Handle("/session/chatwoot/config", c.Then(s.DeleteChatwootConfig())).Methods("DELETE")
-	s.router.Handle("/webhook/chatwoot", s.ChatwootWebhook()).Methods("POST")
+	s.router.Handle("/webhook/chatwoot/{instanceName}", s.ChatwootWebhook()).Methods("POST")
 
 	s.router.Handle("/chat/send/text", c.Then(s.SendMessage())).Methods("POST")
 	s.router.Handle("/chat/delete", c.Then(s.DeleteMessage())).Methods("POST")
