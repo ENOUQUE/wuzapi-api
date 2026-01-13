@@ -1149,8 +1149,9 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 
 	baseURL := strings.TrimSuffix(chatwootURL, "/")
 	
-	// First, try to list inboxes to see if API channel already exists
-	inboxesURL := fmt.Sprintf("%s/public/api/v1/inboxes", baseURL)
+	// First, try to list inboxes using private API (public API doesn't have list endpoint)
+	// Use the account_id from the URL path (account_id is in the URL like /accounts/1/...)
+	inboxesURL := fmt.Sprintf("%s/api/v1/accounts/%d/inboxes", baseURL, accountID)
 	
 	response, err := client.R().
 		SetHeader("Content-Type", "application/json").
@@ -1428,21 +1429,39 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				sender = senderVal
 			}
 			
-			// Extract phone number - prefer SenderAlt for groups (has the actual WhatsApp number)
-			if senderAltVal, ok := info["SenderAlt"].(string); ok && senderAltVal != "" {
-				// SenderAlt is in format like "556286410226:37@s.whatsapp.net"
-				if strings.Contains(senderAltVal, "@") {
-					phoneNumber = strings.Split(senderAltVal, "@")[0]
-					// Remove device ID suffix like "556286410226:37" -> "556286410226"
+			// Extract phone number - prefer Sender for individual messages, SenderAlt for groups
+			if sender != "" {
+				// Sender is in format like "5516991643913:49@s.whatsapp.net" or "5516982650698@s.whatsapp.net"
+				if strings.Contains(sender, "@s.whatsapp.net") {
+					phoneNumber = strings.Split(sender, "@")[0]
+					// Remove device ID suffix like "5516991643913:49" -> "5516991643913"
 					if strings.Contains(phoneNumber, ":") {
 						phoneNumber = strings.Split(phoneNumber, ":")[0]
 					}
 				}
-			} else if sender != "" {
-				// Fallback to Sender if SenderAlt not available
-				if strings.Contains(sender, "@") {
-					phoneNumber = strings.Split(sender, "@")[0]
-					// Remove any prefix like "5516991643913:49" -> "5516991643913"
+			}
+			
+			// For groups or when Sender doesn't have @s.whatsapp.net, try SenderAlt
+			// Note: SenderAlt might be in format like "254957848666148@lid" (LID - Linked Device ID)
+			// So we still prefer Sender when available
+			if phoneNumber == "" {
+				if senderAltVal, ok := info["SenderAlt"].(string); ok && senderAltVal != "" {
+					// SenderAlt can be like "556286410226:37@s.whatsapp.net" or "254957848666148@lid"
+					if strings.Contains(senderAltVal, "@s.whatsapp.net") {
+						phoneNumber = strings.Split(senderAltVal, "@")[0]
+						// Remove device ID suffix
+						if strings.Contains(phoneNumber, ":") {
+							phoneNumber = strings.Split(phoneNumber, ":")[0]
+						}
+					}
+					// If SenderAlt is @lid format, skip it (can't extract phone from LID)
+				}
+			}
+			
+			// If still no phone number and not a group, try using Chat JID
+			if phoneNumber == "" && !isGroup && chatJID != "" {
+				if strings.Contains(chatJID, "@s.whatsapp.net") {
+					phoneNumber = strings.Split(chatJID, "@")[0]
 					if strings.Contains(phoneNumber, ":") {
 						phoneNumber = strings.Split(phoneNumber, ":")[0]
 					}
@@ -1521,14 +1540,34 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			}
 
 			// Skip if no message content found (e.g., senderKeyDistributionMessage)
-			if !messageFound || messageText == "" {
+			if !messageFound {
 				log.Debug().
 					Str("userID", userID).
 					Str("chatJID", chatJID).
 					Bool("isGroup", isGroup).
 					Bool("messageFound", messageFound).
-					Str("messageText", messageText).
-					Msg("Chatwoot integration skipped - no message content found")
+					Msg("Chatwoot integration skipped - Message object not found in event")
+				return nil
+			}
+			
+			// Allow empty messageText for media messages (image, video, audio, document)
+			// Chatwoot will handle media URLs separately
+			if messageText == "" && messageType == "text" {
+				log.Debug().
+					Str("userID", userID).
+					Str("chatJID", chatJID).
+					Bool("isGroup", isGroup).
+					Str("messageType", messageType).
+					Msg("Chatwoot integration skipped - empty text message content")
+				return nil
+			}
+			
+			// Ensure we have a phone number for individual messages
+			if !isGroup && phoneNumber == "" {
+				log.Debug().
+					Str("userID", userID).
+					Str("chatJID", chatJID).
+					Msg("Chatwoot integration skipped - phone number not found for individual message")
 				return nil
 			}
 
@@ -1545,6 +1584,17 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				// For individual messages, use phone number (Chatwoot will create/find contact automatically)
 				// Format: just the number without @s.whatsapp.net
 				sourceID = phoneNumber
+			}
+			
+			// Ensure sourceID is not empty
+			if sourceID == "" {
+				log.Debug().
+					Str("userID", userID).
+					Bool("isGroup", isGroup).
+					Str("chatJID", chatJID).
+					Str("phoneNumber", phoneNumber).
+					Msg("Chatwoot integration skipped - sourceID is empty")
+				return nil
 			}
 
 			// Build payload according to Chatwoot API format
