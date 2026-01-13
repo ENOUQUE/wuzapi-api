@@ -6503,29 +6503,42 @@ func (s *server) ConfigureChatwoot() http.HandlerFunc {
 				return
 			}
 			
-			// Use account_id 1 as default if not provided
+			// Account ID is required - it's the Chatwoot account ID (e.g., 1 from /app/accounts/1)
 			if t.AccountID == 0 {
-				t.AccountID = 1
+				s.Respond(w, r, http.StatusBadRequest, errors.New("account_id is required (e.g., 1 from /app/accounts/1)"))
+				return
 			}
 			
 			// Get user name for channel naming
 			userInfo := r.Context().Value("userinfo").(Values)
 			instanceName := userInfo.Get("Name")
 			
-			// Create or get API Channel automatically
+			// Try to create or get API Channel automatically (optional - may not have permissions)
+			// If it fails, we'll use account_id as inbox_id (which is correct)
 			inboxID, err := createOrGetChatwootAPIChannel(t.URL, t.Token, t.AccountID, instanceName)
 			if err != nil {
-				log.Warn().
+				// Only fail if token is invalid - otherwise use account_id
+				if strings.Contains(err.Error(), "invalid API token") {
+					log.Warn().
+						Err(err).
+						Str("userID", txtid).
+						Str("url", t.URL).
+						Int("accountID", t.AccountID).
+						Msg("Invalid Chatwoot API token")
+					s.Respond(w, r, http.StatusBadRequest, fmt.Errorf("invalid Chatwoot API token: %v", err))
+					return
+				}
+				// For other errors, use account_id as inbox_id
+				log.Info().
 					Err(err).
 					Str("userID", txtid).
 					Str("url", t.URL).
 					Int("accountID", t.AccountID).
-					Msg("Failed to create/get Chatwoot API Channel")
-				s.Respond(w, r, http.StatusBadRequest, fmt.Errorf("failed to create Chatwoot API Channel: %v", err))
-				return
+					Msg("Using account_id as inbox_id (Chatwoot will create automatically)")
+				inboxID = t.AccountID
 			}
 			
-			// Update account_id with the actual inbox ID
+			// Use the inbox ID (usually same as account_id for public API tokens)
 			t.AccountID = inboxID
 			
 			log.Info().

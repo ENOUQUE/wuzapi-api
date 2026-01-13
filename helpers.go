@@ -1142,6 +1142,7 @@ func testChatwootConnection(chatwootURL, chatwootToken string, inboxID int) erro
 
 // Create or get API Channel in Chatwoot
 // Returns the inbox identifier (channel identifier) and error
+// Note: accountID should be the Chatwoot account ID (e.g., 1 from /app/accounts/1)
 func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID int, instanceName string) (int, error) {
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
@@ -1165,8 +1166,9 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 		return 0, fmt.Errorf("invalid API token")
 	}
 	
-	// Token is valid for public API, now try private API to list/create inboxes
-	// Use the account_id from the URL path (account_id is in the URL like /accounts/1/...)
+	// Token is valid for public API
+	// Now try private API to list/create inboxes (optional - requires permissions)
+	// Use the account_id provided by user (e.g., 1 from /app/accounts/1)
 	inboxesURL := fmt.Sprintf("%s/api/v1/accounts/%d/inboxes", baseURL, accountID)
 	
 	response, err := client.R().
@@ -1177,21 +1179,22 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 	if err != nil {
 		// If private API fails, token is still valid for public API
 		// Use account_id as inbox_id - Chatwoot will handle inbox creation automatically
-		log.Warn().
+		log.Info().
 			Err(err).
 			Str("url", chatwootURL).
 			Int("accountID", accountID).
-			Msg("Failed to list inboxes via private API, but token is valid for public API. Will use account_id as inbox_id.")
+			Msg("Token valid for public API. Will use account_id as inbox_id (Chatwoot will create inbox automatically).")
 		return accountID, nil
 	}
 
 	// If we get 401 on private API, token doesn't have private API permissions
 	// But it's valid for public API, so we can still use it
+	// This is normal - most API tokens only have public API access
 	if response.StatusCode() == 401 {
-		log.Warn().
+		log.Info().
 			Str("url", chatwootURL).
 			Int("accountID", accountID).
-			Msg("API token valid for public API but lacks private API permissions. Will use account_id as inbox_id. Chatwoot will create inbox/conversation automatically when receiving messages.")
+			Msg("Token valid for public API (no private API permissions needed). Using account_id as inbox_id. Chatwoot will create inbox/conversation automatically when receiving messages.")
 		return accountID, nil
 	}
 
