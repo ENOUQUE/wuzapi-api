@@ -1575,8 +1575,18 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				pushName = pushNameVal
 			}
 			
-			// Extract phone number - prefer Sender for individual messages, SenderAlt for groups
-			if sender != "" {
+			// Extract phone number from Chat JID first (for incoming messages, Chat is the sender's JID)
+			if chatJID != "" && !isGroup {
+				if strings.Contains(chatJID, "@s.whatsapp.net") {
+					phoneNumber = strings.Split(chatJID, "@")[0]
+					if strings.Contains(phoneNumber, ":") {
+						phoneNumber = strings.Split(phoneNumber, ":")[0]
+					}
+				}
+			}
+			
+			// If no phone number from Chat, try Sender
+			if phoneNumber == "" && sender != "" {
 				// Sender is in format like "5516991643913:49@s.whatsapp.net" or "5516982650698@s.whatsapp.net"
 				if strings.Contains(sender, "@s.whatsapp.net") {
 					phoneNumber = strings.Split(sender, "@")[0]
@@ -1601,16 +1611,6 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 						}
 					}
 					// If SenderAlt is @lid format, skip it (can't extract phone from LID)
-				}
-			}
-			
-			// If still no phone number and not a group, try using Chat JID
-			if phoneNumber == "" && !isGroup && chatJID != "" {
-				if strings.Contains(chatJID, "@s.whatsapp.net") {
-					phoneNumber = strings.Split(chatJID, "@")[0]
-					if strings.Contains(phoneNumber, ":") {
-						phoneNumber = strings.Split(phoneNumber, ":")[0]
-					}
 				}
 			}
 
@@ -1697,6 +1697,7 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				log.Debug().
 					Str("userID", userID).
 					Str("chatJID", chatJID).
+					Str("sender", sender).
 					Msg("Chatwoot integration skipped - phone number not found for individual message")
 				return nil
 			}
