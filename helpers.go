@@ -1201,6 +1201,11 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 							// Configure webhook URL for existing inbox
 							if webhookBaseURL != "" && instanceName != "" {
 								webhookURL := fmt.Sprintf("%s/webhook/chatwoot/%s", strings.TrimSuffix(webhookBaseURL, "/"), instanceName)
+								log.Info().
+									Str("url", chatwootURL).
+									Int("inboxID", foundInboxID).
+									Str("webhookURL", webhookURL).
+									Msg("Attempting to configure webhook for existing inbox")
 								err := configureChatwootInboxWebhook(chatwootURL, chatwootToken, accountID, foundInboxID, webhookURL)
 								if err != nil {
 									// Log warning but don't fail - webhook can be configured manually
@@ -1210,7 +1215,18 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 										Int("inboxID", foundInboxID).
 										Str("webhookURL", webhookURL).
 										Msg("Failed to configure inbox webhook automatically (can be configured manually in Chatwoot)")
+								} else {
+									log.Info().
+										Str("url", chatwootURL).
+										Int("inboxID", foundInboxID).
+										Str("webhookURL", webhookURL).
+										Msg("Successfully configured webhook for existing inbox")
 								}
+							} else {
+								log.Warn().
+									Str("webhookBaseURL", webhookBaseURL).
+									Str("instanceName", instanceName).
+									Msg("Skipping webhook configuration - missing webhookBaseURL or instanceName")
 							}
 							
 							return foundInboxID, nil
@@ -1301,6 +1317,11 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 		// Configure webhook URL for the created inbox
 		if webhookBaseURL != "" && instanceName != "" {
 			webhookURL := fmt.Sprintf("%s/webhook/chatwoot/%s", strings.TrimSuffix(webhookBaseURL, "/"), instanceName)
+			log.Info().
+				Str("url", chatwootURL).
+				Int("inboxID", createdInboxID).
+				Str("webhookURL", webhookURL).
+				Msg("Attempting to configure webhook for newly created inbox")
 			err := configureChatwootInboxWebhook(chatwootURL, chatwootToken, accountID, createdInboxID, webhookURL)
 			if err != nil {
 				// Log warning but don't fail - webhook can be configured manually
@@ -1310,7 +1331,18 @@ func createOrGetChatwootAPIChannel(chatwootURL, chatwootToken string, accountID 
 					Int("inboxID", createdInboxID).
 					Str("webhookURL", webhookURL).
 					Msg("Failed to configure inbox webhook automatically (can be configured manually in Chatwoot)")
+			} else {
+				log.Info().
+					Str("url", chatwootURL).
+					Int("inboxID", createdInboxID).
+					Str("webhookURL", webhookURL).
+					Msg("Successfully configured webhook for newly created inbox")
 			}
+		} else {
+			log.Warn().
+				Str("webhookBaseURL", webhookBaseURL).
+				Str("instanceName", instanceName).
+				Msg("Skipping webhook configuration - missing webhookBaseURL or instanceName")
 		}
 		return createdInboxID, nil
 	}
@@ -1575,24 +1607,51 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				pushName = pushNameVal
 			}
 			
-			// Extract phone number from Chat JID first (for incoming messages, Chat is the sender's JID)
-			if chatJID != "" && !isGroup {
-				if strings.Contains(chatJID, "@s.whatsapp.net") {
-					phoneNumber = strings.Split(chatJID, "@")[0]
-					if strings.Contains(phoneNumber, ":") {
-						phoneNumber = strings.Split(phoneNumber, ":")[0]
-					}
-				}
+			// Get SenderAlt early for phone number extraction
+			var senderAlt string
+			if senderAltVal, ok := info["SenderAlt"].(string); ok {
+				senderAlt = senderAltVal
 			}
 			
-			// If no phone number from Chat, try Sender
-			if phoneNumber == "" && sender != "" {
-				// Sender is in format like "5516991643913:49@s.whatsapp.net" or "5516982650698@s.whatsapp.net"
-				if strings.Contains(sender, "@s.whatsapp.net") {
-					phoneNumber = strings.Split(sender, "@")[0]
-					// Remove device ID suffix like "5516991643913:49" -> "5516991643913"
-					if strings.Contains(phoneNumber, ":") {
-						phoneNumber = strings.Split(phoneNumber, ":")[0]
+			// Extract phone number - priority order:
+			// 1. For incoming messages (!isFromMe), try Sender first (most reliable)
+			// 2. If Sender == Chat (both are the same), try SenderAlt
+			// 3. For outgoing messages (isFromMe), use Chat (recipient)
+			if !isGroup {
+				if !isFromMe {
+					// Incoming message: Sender should be the sender's JID
+					if sender != "" && strings.Contains(sender, "@s.whatsapp.net") {
+						phoneNumber = strings.Split(sender, "@")[0]
+						if strings.Contains(phoneNumber, ":") {
+							phoneNumber = strings.Split(phoneNumber, ":")[0]
+						}
+					}
+					
+					// If Sender == Chat (both are the same), they might both be the recipient
+					// In this case, try SenderAlt which might have the real sender
+					if phoneNumber == "" || (chatJID != "" && sender == chatJID) {
+						if senderAlt != "" && strings.Contains(senderAlt, "@s.whatsapp.net") {
+							phoneNumber = strings.Split(senderAlt, "@")[0]
+							if strings.Contains(phoneNumber, ":") {
+								phoneNumber = strings.Split(phoneNumber, ":")[0]
+							}
+						}
+					}
+					
+					// If still no phone number, try Chat as fallback (for incoming, Chat might be sender)
+					if phoneNumber == "" && chatJID != "" && strings.Contains(chatJID, "@s.whatsapp.net") {
+						phoneNumber = strings.Split(chatJID, "@")[0]
+						if strings.Contains(phoneNumber, ":") {
+							phoneNumber = strings.Split(phoneNumber, ":")[0]
+						}
+					}
+				} else {
+					// Outgoing message: Chat should be the recipient's JID
+					if chatJID != "" && strings.Contains(chatJID, "@s.whatsapp.net") {
+						phoneNumber = strings.Split(chatJID, "@")[0]
+						if strings.Contains(phoneNumber, ":") {
+							phoneNumber = strings.Split(phoneNumber, ":")[0]
+						}
 					}
 				}
 			}
@@ -1601,27 +1660,11 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				Str("userID", userID).
 				Str("chatJID", chatJID).
 				Str("sender", sender).
+				Str("senderAlt", senderAlt).
 				Str("phoneNumber", phoneNumber).
 				Bool("isGroup", isGroup).
 				Bool("isFromMe", isFromMe).
 				Msg("Phone number extraction debug")
-			
-			// For groups or when Sender doesn't have @s.whatsapp.net, try SenderAlt
-			// Note: SenderAlt might be in format like "254957848666148@lid" (LID - Linked Device ID)
-			// So we still prefer Sender when available
-			if phoneNumber == "" {
-				if senderAltVal, ok := info["SenderAlt"].(string); ok && senderAltVal != "" {
-					// SenderAlt can be like "556286410226:37@s.whatsapp.net" or "254957848666148@lid"
-					if strings.Contains(senderAltVal, "@s.whatsapp.net") {
-						phoneNumber = strings.Split(senderAltVal, "@")[0]
-						// Remove device ID suffix
-						if strings.Contains(phoneNumber, ":") {
-							phoneNumber = strings.Split(phoneNumber, ":")[0]
-						}
-					}
-					// If SenderAlt is @lid format, skip it (can't extract phone from LID)
-				}
-			}
 
 			// Extract message content
 			messageFound := false
@@ -1683,8 +1726,12 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				log.Debug().
 					Str("userID", userID).
 					Str("chatJID", chatJID).
+					Str("sender", sender).
+					Str("senderAlt", senderAlt).
 					Bool("isGroup", isGroup).
+					Bool("isFromMe", isFromMe).
 					Bool("messageFound", messageFound).
+					Interface("eventObj", eventObj).
 					Msg("Chatwoot integration skipped - Message object not found in event")
 				return nil
 			}
@@ -1695,7 +1742,11 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				log.Debug().
 					Str("userID", userID).
 					Str("chatJID", chatJID).
+					Str("sender", sender).
+					Str("senderAlt", senderAlt).
+					Str("phoneNumber", phoneNumber).
 					Bool("isGroup", isGroup).
+					Bool("isFromMe", isFromMe).
 					Str("messageType", messageType).
 					Msg("Chatwoot integration skipped - empty text message content")
 				return nil
@@ -1707,7 +1758,11 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 					Str("userID", userID).
 					Str("chatJID", chatJID).
 					Str("sender", sender).
+					Str("senderAlt", senderAlt).
+					Str("phoneNumber", phoneNumber).
 					Str("messageText", messageText).
+					Bool("isGroup", isGroup).
+					Bool("isFromMe", isFromMe).
 					Bool("messageFound", messageFound).
 					Msg("Chatwoot integration skipped - phone number not found for individual message")
 				return nil
