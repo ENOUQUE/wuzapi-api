@@ -1597,6 +1597,15 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				}
 			}
 			
+			log.Debug().
+				Str("userID", userID).
+				Str("chatJID", chatJID).
+				Str("sender", sender).
+				Str("phoneNumber", phoneNumber).
+				Bool("isGroup", isGroup).
+				Bool("isFromMe", isFromMe).
+				Msg("Phone number extraction debug")
+			
 			// For groups or when Sender doesn't have @s.whatsapp.net, try SenderAlt
 			// Note: SenderAlt might be in format like "254957848666148@lid" (LID - Linked Device ID)
 			// So we still prefer Sender when available
@@ -1698,6 +1707,8 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 					Str("userID", userID).
 					Str("chatJID", chatJID).
 					Str("sender", sender).
+					Str("messageText", messageText).
+					Bool("messageFound", messageFound).
 					Msg("Chatwoot integration skipped - phone number not found for individual message")
 				return nil
 			}
