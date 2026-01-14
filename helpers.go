@@ -1614,10 +1614,14 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			}
 			
 			// Extract phone number - priority order:
-			// 1. For incoming messages (!isFromMe), try Chat first (most reliable for individual chats)
-			// 2. If Chat is not available or invalid, try Sender
-			// 3. If Sender == Chat (both are the same), use Chat directly (they represent the same number)
-			// 4. For outgoing messages (isFromMe), use Chat (recipient)
+			// For individual chats (!isGroup):
+			//   1. For incoming messages (!isFromMe), try Chat first (most reliable for individual chats)
+			//   2. If Chat is not available or invalid, try Sender
+			//   3. If Sender == Chat (both are the same), use Chat directly (they represent the same number)
+			//   4. For outgoing messages (isFromMe), use Chat (recipient)
+			// For groups (isGroup):
+			//   1. For incoming messages, try SenderAlt first (contains real phone number)
+			//   2. If SenderAlt is not available, try Sender (might be LID)
 			if !isGroup {
 				if !isFromMe {
 					// Incoming message: Chat should be the sender's JID for individual chats
@@ -1648,6 +1652,26 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 						}
 					}
 				}
+			} else {
+				// Group message: extract phone number from sender
+				if !isFromMe {
+					// Incoming group message: try SenderAlt first (usually contains real phone number)
+					if senderAlt != "" && strings.Contains(senderAlt, "@s.whatsapp.net") {
+						phoneNumber = strings.Split(senderAlt, "@")[0]
+						if strings.Contains(phoneNumber, ":") {
+							phoneNumber = strings.Split(phoneNumber, ":")[0]
+						}
+					}
+					
+					// If SenderAlt didn't work, try Sender (might be LID, so skip if @lid)
+					if phoneNumber == "" && sender != "" && strings.Contains(sender, "@s.whatsapp.net") {
+						phoneNumber = strings.Split(sender, "@")[0]
+						if strings.Contains(phoneNumber, ":") {
+							phoneNumber = strings.Split(phoneNumber, ":")[0]
+						}
+					}
+				}
+				// For outgoing group messages, phoneNumber can remain empty (not needed for sender info)
 			}
 			
 			log.Debug().
