@@ -6891,7 +6891,7 @@ func (s *server) ChatwootWebhook() http.HandlerFunc {
 		}
 
 		// Send message
-		_, err = client.SendMessage(context.Background(), recipient, msg, whatsmeow.SendRequestExtra{ID: msgid})
+		resp, err := client.SendMessage(context.Background(), recipient, msg, whatsmeow.SendRequestExtra{ID: msgid})
 		if err != nil {
 			log.Error().Err(err).Str("userID", userID).Str("phone", phoneNumber).Msg("Failed to send message to WhatsApp")
 			s.respondWithJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -6906,9 +6906,56 @@ func (s *server) ChatwootWebhook() http.HandlerFunc {
 			Str("messageID", msgid).
 			Msg("Message sent to WhatsApp from Chatwoot webhook")
 
+		// Get MyClient to send webhook event
+		myClient := clientManager.GetMyClient(userID)
+		if myClient != nil {
+			// Get user token from database (cache uses token as key, not userID)
+			var token string
+			err := s.db.QueryRow("SELECT token FROM users WHERE id=$1", userID).Scan(&token)
+			if err != nil {
+				log.Warn().Err(err).Str("userID", userID).Msg("Failed to get token for webhook event")
+			} else if token != "" {
+				// Create event payload for sent message (similar to received message format)
+				// This will be sent to the configured webhook
+				eventPayload := map[string]interface{}{
+					"type": "Message",
+					"event": map[string]interface{}{
+						"Info": map[string]interface{}{
+							"ID":        msgid,
+							"Chat":      recipient.String(),
+							"Sender":    client.Store.ID.ToNonAD().String(),
+							"IsFromMe":  true,
+							"IsGroup":   false,
+							"Type":      "text",
+							"PushName":  "",
+							"Timestamp": time.Now(),
+						},
+						"Message": map[string]interface{}{
+							"conversation": content,
+						},
+					},
+				}
+
+				// Set the token in the MyClient if not already set
+				if myClient.token == "" {
+					myClient.token = token
+				}
+				
+				// Send event to webhook
+				go func() {
+					postmap := map[string]interface{}{
+						"type":  "Message",
+						"event": eventPayload["event"],
+					}
+					sendEventWithWebHook(myClient, postmap, "")
+				}()
+			}
+		}
+
 		s.respondWithJSON(w, http.StatusOK, map[string]interface{}{
 			"status":    "success",
 			"messageID": msgid,
+			"timestamp": resp.Timestamp.Unix(),
 		})
 	}
 }

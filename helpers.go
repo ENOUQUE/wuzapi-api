@@ -1614,37 +1614,31 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			}
 			
 			// Extract phone number - priority order:
-			// 1. For incoming messages (!isFromMe), try Sender first (most reliable)
-			// 2. If Sender == Chat (both are the same), try SenderAlt
-			// 3. For outgoing messages (isFromMe), use Chat (recipient)
+			// 1. For incoming messages (!isFromMe), try Chat first (most reliable for individual chats)
+			// 2. If Chat is not available or invalid, try Sender
+			// 3. If Sender == Chat (both are the same), use Chat directly (they represent the same number)
+			// 4. For outgoing messages (isFromMe), use Chat (recipient)
 			if !isGroup {
 				if !isFromMe {
-					// Incoming message: Sender should be the sender's JID
-					if sender != "" && strings.Contains(sender, "@s.whatsapp.net") {
+					// Incoming message: Chat should be the sender's JID for individual chats
+					// Extract phone number from Chat JID first (for incoming messages, Chat is the sender's JID)
+					if chatJID != "" && strings.Contains(chatJID, "@s.whatsapp.net") {
+						phoneNumber = strings.Split(chatJID, "@")[0]
+						if strings.Contains(phoneNumber, ":") {
+							phoneNumber = strings.Split(phoneNumber, ":")[0]
+						}
+					}
+					
+					// If no phone number from Chat, try Sender
+					if phoneNumber == "" && sender != "" && strings.Contains(sender, "@s.whatsapp.net") {
 						phoneNumber = strings.Split(sender, "@")[0]
 						if strings.Contains(phoneNumber, ":") {
 							phoneNumber = strings.Split(phoneNumber, ":")[0]
 						}
 					}
 					
-					// If Sender == Chat (both are the same), they might both be the recipient
-					// In this case, try SenderAlt which might have the real sender
-					if phoneNumber == "" || (chatJID != "" && sender == chatJID) {
-						if senderAlt != "" && strings.Contains(senderAlt, "@s.whatsapp.net") {
-							phoneNumber = strings.Split(senderAlt, "@")[0]
-							if strings.Contains(phoneNumber, ":") {
-								phoneNumber = strings.Split(phoneNumber, ":")[0]
-							}
-						}
-					}
-					
-					// If still no phone number, try Chat as fallback (for incoming, Chat might be sender)
-					if phoneNumber == "" && chatJID != "" && strings.Contains(chatJID, "@s.whatsapp.net") {
-						phoneNumber = strings.Split(chatJID, "@")[0]
-						if strings.Contains(phoneNumber, ":") {
-							phoneNumber = strings.Split(phoneNumber, ":")[0]
-						}
-					}
+					// If Sender == Chat, they both represent the same number, so we already have it
+					// SenderAlt might be a LID (@lid) which we can't use, so skip it
 				} else {
 					// Outgoing message: Chat should be the recipient's JID
 					if chatJID != "" && strings.Contains(chatJID, "@s.whatsapp.net") {
