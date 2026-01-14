@@ -1813,10 +1813,11 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			}
 
 			// Build payload according to Chatwoot API format
+			// message_type should be "incoming" for received messages (not content type)
 			payload := map[string]interface{}{
 				"content":      messageText,
-				"message_type": messageType,
-				"source_id":    sourceID, // Unique identifier for contact/conversation
+				"message_type": "incoming", // Chatwoot expects "incoming" or "outgoing", not content type
+				"source_id":    sourceID,   // Unique identifier for contact/conversation
 				"inbox_id":     inboxID,
 			}
 
