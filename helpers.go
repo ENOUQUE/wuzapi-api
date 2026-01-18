@@ -1687,6 +1687,18 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 			// Extract message content
 			messageFound := false
 			if message, ok := eventObj["Message"].(map[string]interface{}); ok {
+				// Check for senderKeyDistributionMessage first - these are encryption keys, not actual messages
+				// We should skip these as they don't contain actual message content
+				if _, hasSenderKey := message["senderKeyDistributionMessage"].(map[string]interface{}); hasSenderKey {
+					// This is just an encryption key message, not actual content - skip it
+					log.Debug().
+						Str("userID", userID).
+						Str("chatJID", chatJID).
+						Str("sender", sender).
+						Msg("Chatwoot integration skipped - senderKeyDistributionMessage (encryption key only)")
+					return nil
+				}
+				
 				messageFound = true
 				// Try conversation first (simple text)
 				if textMsg, ok := message["conversation"].(string); ok && textMsg != "" {
@@ -1698,20 +1710,24 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 					}
 				} else if imageMsg, ok := message["imageMessage"].(map[string]interface{}); ok {
 					messageType = "image"
-					if caption, ok := imageMsg["caption"].(string); ok {
+					if caption, ok := imageMsg["caption"].(string); ok && caption != "" {
 						messageText = caption
+					} else {
+						messageText = "[Imagem]"
 					}
 				} else if videoMsg, ok := message["videoMessage"].(map[string]interface{}); ok {
 					messageType = "video"
-					if caption, ok := videoMsg["caption"].(string); ok {
+					if caption, ok := videoMsg["caption"].(string); ok && caption != "" {
 						messageText = caption
+					} else {
+						messageText = "[Vídeo]"
 					}
 				} else if _, ok := message["audioMessage"].(map[string]interface{}); ok {
 					messageType = "audio"
 					messageText = "[Áudio]"
 				} else if documentMsg, ok := message["documentMessage"].(map[string]interface{}); ok {
 					messageType = "file"
-					if fileName, ok := documentMsg["fileName"].(string); ok {
+					if fileName, ok := documentMsg["fileName"].(string); ok && fileName != "" {
 						messageText = fileName
 					} else {
 						messageText = "[Documento]"
@@ -1736,10 +1752,23 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 					} else {
 						messageText = "[Mensagem com lista]"
 					}
+				} else {
+					// Message object exists but we couldn't find any known message type
+					// This might be an unsupported message type - log it but don't fail completely
+					var messageKeys []string
+					for k := range message {
+						messageKeys = append(messageKeys, k)
+					}
+					log.Debug().
+						Str("userID", userID).
+						Str("chatJID", chatJID).
+						Strs("messageKeys", messageKeys).
+						Msg("Chatwoot integration skipped - unsupported message type")
+					return nil
 				}
 			}
 
-			// Skip if no message content found (e.g., senderKeyDistributionMessage)
+			// Skip if no message content found (e.g., empty Message object)
 			if !messageFound {
 				log.Debug().
 					Str("userID", userID).
@@ -1754,36 +1783,61 @@ func transformEventToChatwoot(eventData map[string]interface{}, inboxID int, use
 				return nil
 			}
 			
-			// Allow empty messageText for media messages (image, video, audio, document)
-			// Chatwoot will handle media URLs separately
-			if messageText == "" && messageType == "text" {
-				log.Debug().
-					Str("userID", userID).
-					Str("chatJID", chatJID).
-					Str("sender", sender).
-					Str("senderAlt", senderAlt).
-					Str("phoneNumber", phoneNumber).
-					Bool("isGroup", isGroup).
-					Bool("isFromMe", isFromMe).
-					Str("messageType", messageType).
-					Msg("Chatwoot integration skipped - empty text message content")
-				return nil
+			// Ensure we have message text (even if it's a placeholder for media)
+			// Media messages should have a placeholder text
+			if messageText == "" {
+				if messageType == "text" {
+					// For text messages, we need actual content
+					log.Debug().
+						Str("userID", userID).
+						Str("chatJID", chatJID).
+						Str("sender", sender).
+						Str("senderAlt", senderAlt).
+						Str("phoneNumber", phoneNumber).
+						Bool("isGroup", isGroup).
+						Bool("isFromMe", isFromMe).
+						Str("messageType", messageType).
+						Msg("Chatwoot integration skipped - empty text message content")
+					return nil
+				} else {
+					// For media messages, use a default placeholder if caption is empty
+					// Capitalize first letter of messageType
+					if len(messageType) > 0 {
+						messageText = fmt.Sprintf("[%s%s]", strings.ToUpper(string(messageType[0])), messageType[1:])
+					} else {
+						messageText = "[Mídia]"
+					}
+				}
 			}
 			
 			// Ensure we have a phone number for individual messages
-			if !isGroup && phoneNumber == "" {
+			// For groups, phoneNumber is optional (we use group JID as source_id)
+			if !isGroup {
+				if phoneNumber == "" {
+					log.Debug().
+						Str("userID", userID).
+						Str("chatJID", chatJID).
+						Str("sender", sender).
+						Str("senderAlt", senderAlt).
+						Str("phoneNumber", phoneNumber).
+						Str("messageText", messageText).
+						Bool("isGroup", isGroup).
+						Bool("isFromMe", isFromMe).
+						Bool("messageFound", messageFound).
+						Msg("Chatwoot integration skipped - phone number not found for individual message")
+					return nil
+				}
+			} else {
+				// For group messages, phoneNumber is optional but helps identify the sender
+				// We'll still send the message even if phoneNumber is empty (group JID is used as source_id)
 				log.Debug().
 					Str("userID", userID).
 					Str("chatJID", chatJID).
 					Str("sender", sender).
 					Str("senderAlt", senderAlt).
 					Str("phoneNumber", phoneNumber).
-					Str("messageText", messageText).
 					Bool("isGroup", isGroup).
-					Bool("isFromMe", isFromMe).
-					Bool("messageFound", messageFound).
-					Msg("Chatwoot integration skipped - phone number not found for individual message")
-				return nil
+					Msg("Group message - phoneNumber optional (will use group JID as source_id)")
 			}
 
 			// Chatwoot expects this format for incoming messages

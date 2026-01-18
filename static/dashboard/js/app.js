@@ -453,16 +453,41 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     updateButtonControls();
     
-    // Initialize modal if not already initialized
-    if (!$('#modalSendButtonsMessage').hasClass('ui modal')) {
-      $('#modalSendButtonsMessage').modal({
+    // Ensure modal is initialized with proper configuration
+    const $modal = $('#modalSendButtonsMessage');
+    if ($modal.length > 0) {
+      // If modal is already initialized, destroy and reinitialize to ensure proper config
+      if ($modal.hasClass('ui modal')) {
+        try {
+          $modal.modal('destroy');
+        } catch(e) {
+          console.warn('Could not destroy modal:', e);
+        }
+      }
+      // Initialize modal with proper configuration
+      $modal.modal({
+        closable: true,
+        autofocus: false,
         onApprove: function() {
           sendButtonsMessage();
-          return false;
+          return false; // Prevent modal from closing automatically
+        },
+        onShow: function() {
+          // Reset form when modal is shown
+          if (buttonsForm) {
+            buttonsForm.reset();
+          }
+          // Clear any error/success messages
+          if (container) {
+            container.innerHTML = '';
+            container.classList.add('hidden');
+          }
         }
       });
+      // Mark modal as having special configuration to prevent destruction by initializeAllModals
+      $modal.data('hasSpecialConfig', true);
     }
-    $('#modalSendButtonsMessage').modal('show');
+    $modal.modal('show');
   });
 
   // Send List Message - using event delegation to handle dynamically shown cards
@@ -484,16 +509,41 @@ document.addEventListener('DOMContentLoaded', function() {
     resetListForm();
     updateSectionControls();
     
-    // Initialize modal if not already initialized
-    if (!$('#modalSendListMessage').hasClass('ui modal')) {
-      $('#modalSendListMessage').modal({
+    // Ensure modal is initialized with proper configuration
+    const $modal = $('#modalSendListMessage');
+    if ($modal.length > 0) {
+      // If modal is already initialized, destroy and reinitialize to ensure proper config
+      if ($modal.hasClass('ui modal')) {
+        try {
+          $modal.modal('destroy');
+        } catch(e) {
+          console.warn('Could not destroy modal:', e);
+        }
+      }
+      // Initialize modal with proper configuration
+      $modal.modal({
+        closable: true,
+        autofocus: false,
         onApprove: function() {
           sendListMessage();
-          return false;
+          return false; // Prevent modal from closing automatically
+        },
+        onShow: function() {
+          // Reset form when modal is shown
+          if (listForm) {
+            listForm.reset();
+          }
+          // Clear any error/success messages
+          if (container) {
+            container.innerHTML = '';
+            container.classList.add('hidden');
+          }
         }
       });
+      // Mark modal as having special configuration to prevent destruction by initializeAllModals
+      $modal.data('hasSpecialConfig', true);
     }
-    $('#modalSendListMessage').modal('show');
+    $modal.modal('show');
   });
 
   // Add/Remove Buttons
@@ -1468,11 +1518,11 @@ function hideWidgets() {
 // Initialize all modals to ensure they work properly
 function initializeAllModals() {
   // Initialize all message modals - initialize even if hidden
+  // Note: Modals with special configurations (like onApprove) are handled in their click handlers
   const modals = [
     'modalSendTextMessage',
     'modalDeleteMessage',
-    'modalSendButtonsMessage',
-    'modalSendListMessage',
+    // Skip modalSendButtonsMessage and modalSendListMessage - they are initialized in click handlers with special config
     'modalSendImage',
     'modalSendAudio',
     'modalSendVideo',
@@ -1496,31 +1546,36 @@ function initializeAllModals() {
   modals.forEach(modalId => {
     const $modal = $('#' + modalId);
     if ($modal.length > 0) {
-      // Always initialize, even if already initialized (re-initialize if needed)
+      // Only initialize if not already initialized to avoid conflicts
       try {
-        // Destroy existing modal if it exists to avoid conflicts
-        if ($modal.hasClass('ui modal')) {
+        // Only destroy and reinitialize if modal doesn't have special handlers
+        if ($modal.hasClass('ui modal') && !$modal.data('hasSpecialConfig')) {
           $modal.modal('destroy');
         }
-        // Initialize the modal
-        $modal.modal({
-          closable: true,
-          autofocus: false,
-          onShow: function() {
-            // Reset form when modal is shown
-            const form = $modal.find('form');
-            if (form.length > 0) {
-              form[0].reset();
+        // Initialize the modal only if not already initialized or doesn't have special config
+        if (!$modal.hasClass('ui modal')) {
+          $modal.modal({
+            closable: true,
+            autofocus: false,
+            onShow: function() {
+              // Reset form when modal is shown
+              const form = $modal.find('form');
+              if (form.length > 0) {
+                form[0].reset();
+              }
+              // Clear any error/success messages
+              const container = $modal.find('[id$="Container"]');
+              if (container.length > 0) {
+                container.html('');
+                container.addClass('hidden');
+              }
             }
-            // Clear any error/success messages
-            const container = $modal.find('[id$="Container"]');
-            if (container.length > 0) {
-              container.html('');
-              container.addClass('hidden');
-            }
-          }
-        });
-        initializedCount++;
+          });
+          initializedCount++;
+        } else if ($modal.data('hasSpecialConfig')) {
+          // Modal already has special config, skip reinitialization
+          initializedCount++;
+        }
       } catch (e) {
         console.error('Error initializing modal ' + modalId + ':', e);
       }
